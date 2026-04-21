@@ -2,6 +2,8 @@ export type PairingInfo = {
   host: string;
   port: number;
   token: string;
+  httpProtocol: "http" | "https";
+  wsProtocol: "ws" | "wss";
 };
 
 export type PairErrorCode =

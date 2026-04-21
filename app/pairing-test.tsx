@@ -65,7 +65,7 @@ export default function PairingTestScreen() {
       ? permission
       : await requestPermission();
 
-    if (!currentPermission.granted) {
+    if (!currentPermission?.granted) {
       setLocalError('カメラ権限が必要です。');
       return;
     }

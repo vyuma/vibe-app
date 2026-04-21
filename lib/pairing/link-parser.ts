@@ -24,6 +24,9 @@ export function parsePairingLink(rawLink: string): PairingLinkParseResult {
       const host = url.searchParams.get("host");
       const port = url.searchParams.get("port");
       const token = url.searchParams.get("token");
+      const httpProtocolParam =
+        url.searchParams.get("httpProtocol") ?? url.searchParams.get("protocol");
+      const wsProtocolParam = url.searchParams.get("wsProtocol");
 
       if (!host || !port || !token) {
         return { ok: false, reason: "ペアリングURLの必須パラメータが不足しています。" };
@@ -35,12 +38,30 @@ export function parsePairingLink(rawLink: string): PairingLinkParseResult {
         return { ok: false, reason: "port の形式が不正です。" };
       }
 
+      const httpProtocol = parseHttpProtocol(httpProtocolParam);
+      if (!httpProtocol) {
+        return {
+          ok: false,
+          reason: "httpProtocol は http または https を指定してください。",
+        };
+      }
+
+      const wsProtocol = parseWsProtocol(wsProtocolParam) ?? inferWsProtocol(httpProtocol);
+      if (wsProtocolParam && !parseWsProtocol(wsProtocolParam)) {
+        return {
+          ok: false,
+          reason: "wsProtocol は ws または wss を指定してください。",
+        };
+      }
+
       return {
         ok: true,
         pairingInfo: {
           host,
           port: parsedPort,
           token,
+          httpProtocol,
+          wsProtocol,
         },
       };
     }
@@ -64,6 +85,8 @@ export function parsePairingLink(rawLink: string): PairingLinkParseResult {
           host: url.hostname,
           port,
           token,
+          httpProtocol: url.protocol === "https:" ? "https" : "http",
+          wsProtocol: url.protocol === "https:" ? "wss" : "ws",
         },
       };
     }
@@ -83,7 +106,7 @@ export function buildPairEndpoint(
     deviceName,
   });
 
-  return `http://${pairingInfo.host}:${pairingInfo.port}/pair?${params.toString()}`;
+  return `${pairingInfo.httpProtocol}://${pairingInfo.host}:${pairingInfo.port}/pair?${params.toString()}`;
 }
 
 export function buildDisconnectEndpoint(pairingInfo: PairingInfo): string {
@@ -91,7 +114,7 @@ export function buildDisconnectEndpoint(pairingInfo: PairingInfo): string {
     token: pairingInfo.token,
   });
 
-  return `http://${pairingInfo.host}:${pairingInfo.port}/disconnect?${params.toString()}`;
+  return `${pairingInfo.httpProtocol}://${pairingInfo.host}:${pairingInfo.port}/disconnect?${params.toString()}`;
 }
 
 export function buildWebSocketEndpoint(pairingInfo: PairingInfo): string {
@@ -99,5 +122,33 @@ export function buildWebSocketEndpoint(pairingInfo: PairingInfo): string {
     token: pairingInfo.token,
   });
 
-  return `ws://${pairingInfo.host}:${pairingInfo.port}/ws?${params.toString()}`;
+  return `${pairingInfo.wsProtocol}://${pairingInfo.host}:${pairingInfo.port}/ws?${params.toString()}`;
+}
+
+function parseHttpProtocol(rawProtocol: string | null): "http" | "https" | null {
+  if (!rawProtocol) {
+    return "http";
+  }
+
+  if (rawProtocol === "http" || rawProtocol === "https") {
+    return rawProtocol;
+  }
+
+  return null;
+}
+
+function parseWsProtocol(rawProtocol: string | null): "ws" | "wss" | null {
+  if (!rawProtocol) {
+    return null;
+  }
+
+  if (rawProtocol === "ws" || rawProtocol === "wss") {
+    return rawProtocol;
+  }
+
+  return null;
+}
+
+function inferWsProtocol(httpProtocol: "http" | "https"): "ws" | "wss" {
+  return httpProtocol === "https" ? "wss" : "ws";
 }
