@@ -105,10 +105,16 @@ export function usePairingSession() {
       socketRef.current = null;
     }
 
-    setState((prev) => ({
-      ...prev,
-      isSocketConnected: false,
-    }));
+    setState((prev) => {
+      if (!prev.isSocketConnected) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        isSocketConnected: false,
+      };
+    });
   }
 
   function startSocket() {

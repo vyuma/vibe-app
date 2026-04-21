@@ -3,13 +3,20 @@ import {
   useCameraPermissions,
   type BarcodeScanningResult,
 } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, Vibration } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { usePairingSession } from '@/hooks/usePairingSession';
 import { parsePairingLink } from '@/lib/pairing';
+
+type IosAlertMode = 'vibration' | 'rigid' | 'heavy' | 'notification';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function PairingTestScreen() {
   const [rawLink, setRawLink] = useState('');
@@ -17,6 +24,8 @@ export default function PairingTestScreen() {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [isBadPosture, setIsBadPosture] = useState(false);
+  const [iosAlertMode, setIosAlertMode] = useState<IosAlertMode>('rigid');
   const {
     pairingInfo,
     pairResponse,
@@ -34,6 +43,63 @@ export default function PairingTestScreen() {
       setHasScanned(false);
     }
   }, [scannerVisible]);
+
+  useEffect(() => {
+    if (lastSocketEvent?.type === 'posture_bad') {
+      setIsBadPosture(true);
+      return;
+    }
+
+    if (lastSocketEvent?.type === 'posture_good') {
+      setIsBadPosture(false);
+    }
+  }, [lastSocketEvent]);
+
+  useEffect(() => {
+    if (!isSocketConnected || !isBadPosture) {
+      Vibration.cancel();
+      return;
+    }
+
+    if (Platform.OS === 'android') {
+      // Strong-ish repeating pattern: vibrate 900ms, pause 350ms.
+      Vibration.vibrate([0, 900, 350], true);
+      return () => Vibration.cancel();
+    }
+
+    let disposed = false;
+    const runPulse = async () => {
+      while (!disposed) {
+        if (iosAlertMode === 'vibration') {
+          Vibration.vibrate();
+          await sleep(900);
+          continue;
+        }
+
+        if (iosAlertMode === 'heavy') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          await sleep(700);
+          continue;
+        }
+
+        if (iosAlertMode === 'rigid') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+          await sleep(650);
+          continue;
+        }
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        await sleep(900);
+      }
+    };
+
+    void runPulse();
+
+    return () => {
+      disposed = true;
+      Vibration.cancel();
+    };
+  }, [iosAlertMode, isBadPosture, isSocketConnected]);
 
   async function handleConnect() {
     await handleConnectFromLink(rawLink);
@@ -166,6 +232,33 @@ export default function PairingTestScreen() {
             {getPostureLabel(lastSocketEvent?.type)}
           </ThemedText>
         </ThemedView>
+        {Platform.OS === 'ios' ? (
+          <ThemedView style={styles.modePanel}>
+            <ThemedText>iPhone通知方式</ThemedText>
+            <ThemedView style={styles.modeButtons}>
+              <Pressable
+                onPress={() => setIosAlertMode('vibration')}
+                style={[styles.modeButton, iosAlertMode === 'vibration' && styles.modeButtonActive]}>
+                <ThemedText style={styles.modeButtonText}>バイブレーション</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setIosAlertMode('rigid')}
+                style={[styles.modeButton, iosAlertMode === 'rigid' && styles.modeButtonActive]}>
+                <ThemedText style={styles.modeButtonText}>Rigid</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setIosAlertMode('heavy')}
+                style={[styles.modeButton, iosAlertMode === 'heavy' && styles.modeButtonActive]}>
+                <ThemedText style={styles.modeButtonText}>Heavy</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setIosAlertMode('notification')}
+                style={[styles.modeButton, iosAlertMode === 'notification' && styles.modeButtonActive]}>
+                <ThemedText style={styles.modeButtonText}>Error</ThemedText>
+              </Pressable>
+            </ThemedView>
+          </ThemedView>
+        ) : null}
         <ThemedView style={styles.row}>
           <ThemedText>最新シーケンス</ThemedText>
           <ThemedText type="defaultSemiBold">
@@ -258,6 +351,29 @@ const styles = StyleSheet.create({
   },
   helperText: {
     color: '#5d6b66',
+  },
+  modePanel: {
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  modeButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  modeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#6f8078',
+  },
+  modeButtonActive: {
+    backgroundColor: '#1f5c44',
+  },
+  modeButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
 });
 
