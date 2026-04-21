@@ -13,6 +13,8 @@ import type {
 } from "@/lib/pairing/types";
 
 const DEFAULT_DEVICE_NAME = "vibe-app";
+const HEARTBEAT_INTERVAL_MS = 25_000;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 type PairingSessionState = {
   pairingInfo: PairingInfo | null;
@@ -36,7 +38,10 @@ export function usePairingSession() {
   const [state, setState] = useState<PairingSessionState>(defaultState);
   const pairingInfoRef = useRef<PairingInfo | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
-  const disconnectRef = useRef<() => Promise<void>>(async () => {});
+  const shouldKeepSocketRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     pairingInfoRef.current = state.pairingInfo;
@@ -50,8 +55,8 @@ export function usePairingSession() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState !== "active") {
-        void disconnectRef.current();
+      if (nextState === "active" && shouldKeepSocketRef.current) {
+        connectSocket();
       }
     });
 
@@ -95,6 +100,11 @@ export function usePairingSession() {
   }
 
   function stopSocket() {
+    shouldKeepSocketRef.current = false;
+    reconnectAttemptRef.current = 0;
+    clearReconnectTimer();
+    clearHeartbeatTimer();
+
     const activeSocket = socketRef.current;
     if (activeSocket) {
       activeSocket.onopen = null;
@@ -122,12 +132,36 @@ export function usePairingSession() {
       return;
     }
 
-    stopSocket();
+    shouldKeepSocketRef.current = true;
+    reconnectAttemptRef.current = 0;
+    clearReconnectTimer();
+    connectSocket();
+  }
 
-    const socket = connectPairingSocket(pairingInfoRef.current);
+  function connectSocket() {
+    const pairingInfo = pairingInfoRef.current;
+    if (!pairingInfo) {
+      return;
+    }
+
+    const existingSocket = socketRef.current;
+    if (
+      existingSocket &&
+      (existingSocket.readyState === WebSocket.OPEN ||
+        existingSocket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    clearReconnectTimer();
+    clearHeartbeatTimer();
+
+    const socket = connectPairingSocket(pairingInfo);
     socketRef.current = socket;
 
     socket.onopen = () => {
+      reconnectAttemptRef.current = 0;
+      startHeartbeat();
       setState((prev) => ({
         ...prev,
         isSocketConnected: true,
@@ -159,10 +193,17 @@ export function usePairingSession() {
     };
 
     socket.onclose = () => {
+      clearHeartbeatTimer();
+      socketRef.current = null;
+
       setState((prev) => ({
         ...prev,
         isSocketConnected: false,
       }));
+
+      if (shouldKeepSocketRef.current) {
+        scheduleReconnect();
+      }
     };
   }
 
@@ -188,7 +229,53 @@ export function usePairingSession() {
     setState(defaultState);
   }
 
-  disconnectRef.current = disconnect;
+  function scheduleReconnect() {
+    if (reconnectTimerRef.current) {
+      return;
+    }
+
+    const attempt = reconnectAttemptRef.current;
+    const exponentialDelay = Math.min(
+      MAX_RECONNECT_DELAY_MS,
+      1_000 * 2 ** attempt,
+    );
+    const jitter = Math.floor(Math.random() * 500);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      reconnectAttemptRef.current += 1;
+      connectSocket();
+    }, exponentialDelay + jitter);
+  }
+
+  function clearReconnectTimer() {
+    if (!reconnectTimerRef.current) {
+      return;
+    }
+
+    clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+  }
+
+  function startHeartbeat() {
+    clearHeartbeatTimer();
+    heartbeatTimerRef.current = setInterval(() => {
+      const socket = socketRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      socket.send(JSON.stringify({ type: "ping", at: new Date().toISOString() }));
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  function clearHeartbeatTimer() {
+    if (!heartbeatTimerRef.current) {
+      return;
+    }
+
+    clearInterval(heartbeatTimerRef.current);
+    heartbeatTimerRef.current = null;
+  }
 
   return {
     ...state,

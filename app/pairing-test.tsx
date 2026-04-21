@@ -1,31 +1,31 @@
 import {
-  CameraView,
   useCameraPermissions,
   type BarcodeScanningResult,
-} from 'expo-camera';
-import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput, Vibration } from 'react-native';
+} from "expo-camera";
+import * as Haptics from "expo-haptics";
+import { useEffect, useState } from "react";
+import { Platform, ScrollView, StyleSheet, Vibration } from "react-native";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { usePairingSession } from '@/hooks/usePairingSession';
-import { parsePairingLink } from '@/lib/pairing';
-
-type IosAlertMode = 'vibration' | 'rigid' | 'heavy' | 'notification';
+import { PairingControlPanel } from "@/components/pairing/pairing-control-panel";
+import {
+  type IosAlertMode,
+  PairingStatusPanel,
+} from "@/components/pairing/pairing-status-panel";
+import { usePairingSession } from "@/hooks/usePairingSession";
+import { parsePairingLink } from "@/lib/pairing";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default function PairingTestScreen() {
-  const [rawLink, setRawLink] = useState('');
+  const [rawLink, setRawLink] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [isBadPosture, setIsBadPosture] = useState(false);
-  const [iosAlertMode, setIosAlertMode] = useState<IosAlertMode>('rigid');
+  const [iosAlertMode, setIosAlertMode] = useState<IosAlertMode>("rigid");
   const {
     pairingInfo,
     pairResponse,
@@ -45,12 +45,12 @@ export default function PairingTestScreen() {
   }, [scannerVisible]);
 
   useEffect(() => {
-    if (lastSocketEvent?.type === 'posture_bad') {
+    if (lastSocketEvent?.type === "posture_bad") {
       setIsBadPosture(true);
       return;
     }
 
-    if (lastSocketEvent?.type === 'posture_good') {
+    if (lastSocketEvent?.type === "posture_good") {
       setIsBadPosture(false);
     }
   }, [lastSocketEvent]);
@@ -70,19 +70,19 @@ export default function PairingTestScreen() {
     let disposed = false;
     const runPulse = async () => {
       while (!disposed) {
-        if (iosAlertMode === 'vibration') {
+        if (iosAlertMode === "vibration") {
           Vibration.vibrate();
           await sleep(900);
           continue;
         }
 
-        if (iosAlertMode === 'heavy') {
+        if (iosAlertMode === "heavy") {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           await sleep(700);
           continue;
         }
 
-        if (iosAlertMode === 'rigid') {
+        if (iosAlertMode === "rigid") {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
           await sleep(650);
           continue;
@@ -122,8 +122,8 @@ export default function PairingTestScreen() {
   }
 
   async function handleOpenScanner() {
-    if (Platform.OS === 'web') {
-      setLocalError('QRスキャンはモバイル端末のカメラでのみ利用できます。');
+    if (Platform.OS === "web") {
+      setLocalError("QRスキャンはモバイル端末のカメラでのみ利用できます。");
       return;
     }
 
@@ -132,7 +132,7 @@ export default function PairingTestScreen() {
       : await requestPermission();
 
     if (!currentPermission?.granted) {
-      setLocalError('カメラ権限が必要です。');
+      setLocalError("カメラ権限が必要です。");
       return;
     }
 
@@ -152,126 +152,31 @@ export default function PairingTestScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <ThemedView style={styles.panel}>
-        <ThemedText type="title">連携テスト</ThemedText>
-        <ThemedText style={styles.description}>
-          デスクトップのペアリングリンクを貼り付けるか、QRコードを読み取ってすぐ接続できます。
-        </ThemedText>
+      <PairingControlPanel
+        error={error}
+        hasCameraPermission={Boolean(permission?.granted)}
+        isConnected={Boolean(pairResponse)}
+        isPairing={isPairing}
+        localError={localError}
+        onBarcodeScanned={handleBarcodeScanned}
+        onChangeRawLink={setRawLink}
+        onCloseScanner={() => setScannerVisible(false)}
+        onConnect={() => void handleConnect()}
+        onDisconnect={() => void disconnect()}
+        onOpenScanner={() => void handleOpenScanner()}
+        rawLink={rawLink}
+        scannerVisible={scannerVisible}
+      />
 
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          onChangeText={setRawLink}
-          placeholder="vibeapp://pair?host=..."
-          style={styles.input}
-          value={rawLink}
-        />
-
-        <ThemedView style={styles.buttonRow}>
-          <Pressable disabled={isPairing} onPress={() => void handleConnect()} style={styles.button}>
-            <ThemedText style={styles.buttonText}>
-              {isPairing ? '接続中...' : '接続'}
-            </ThemedText>
-          </Pressable>
-          <Pressable disabled={isPairing} onPress={() => void handleOpenScanner()} style={styles.buttonSecondary}>
-            <ThemedText style={styles.buttonText}>QRをスキャン</ThemedText>
-          </Pressable>
-          <Pressable disabled={!pairResponse} onPress={() => void disconnect()} style={styles.buttonMuted}>
-            <ThemedText style={styles.buttonText}>切断</ThemedText>
-          </Pressable>
-        </ThemedView>
-
-        {scannerVisible ? (
-          <ThemedView style={styles.scannerPanel}>
-            <CameraView
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={handleBarcodeScanned}
-              style={styles.camera}
-            />
-            <ThemedText style={styles.helperText}>
-              QRコード内の `vibeapp://pair?...` リンクを読み取ります。
-            </ThemedText>
-            <Pressable onPress={() => setScannerVisible(false)} style={styles.buttonMuted}>
-              <ThemedText style={styles.buttonText}>スキャンを閉じる</ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : null}
-
-        {localError ? <ThemedText style={styles.error}>{localError}</ThemedText> : null}
-        {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-      </ThemedView>
-
-      <ThemedView style={styles.panel}>
-        <ThemedText type="subtitle">接続状態</ThemedText>
-        <ThemedView style={styles.row}>
-          <ThemedText>ホスト</ThemedText>
-          <ThemedText type="defaultSemiBold">{pairingInfo?.host ?? '-'}</ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>ポート</ThemedText>
-          <ThemedText type="defaultSemiBold">
-            {pairingInfo ? String(pairingInfo.port) : '-'}
-          </ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>接続済み</ThemedText>
-          <ThemedText type="defaultSemiBold">{pairResponse ? 'はい' : 'いいえ'}</ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>デバイス名</ThemedText>
-          <ThemedText type="defaultSemiBold">{pairResponse?.deviceName ?? '-'}</ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>WebSocket</ThemedText>
-          <ThemedText type="defaultSemiBold">{isSocketConnected ? 'はい' : 'いいえ'}</ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>姿勢シグナル</ThemedText>
-          <ThemedText type="defaultSemiBold">
-            {getPostureLabel(lastSocketEvent?.type)}
-          </ThemedText>
-        </ThemedView>
-        {Platform.OS === 'ios' ? (
-          <ThemedView style={styles.modePanel}>
-            <ThemedText>iPhone通知方式</ThemedText>
-            <ThemedView style={styles.modeButtons}>
-              <Pressable
-                onPress={() => setIosAlertMode('vibration')}
-                style={[styles.modeButton, iosAlertMode === 'vibration' && styles.modeButtonActive]}>
-                <ThemedText style={styles.modeButtonText}>バイブレーション</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => setIosAlertMode('rigid')}
-                style={[styles.modeButton, iosAlertMode === 'rigid' && styles.modeButtonActive]}>
-                <ThemedText style={styles.modeButtonText}>Rigid</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => setIosAlertMode('heavy')}
-                style={[styles.modeButton, iosAlertMode === 'heavy' && styles.modeButtonActive]}>
-                <ThemedText style={styles.modeButtonText}>Heavy</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => setIosAlertMode('notification')}
-                style={[styles.modeButton, iosAlertMode === 'notification' && styles.modeButtonActive]}>
-                <ThemedText style={styles.modeButtonText}>Error</ThemedText>
-              </Pressable>
-            </ThemedView>
-          </ThemedView>
-        ) : null}
-        <ThemedView style={styles.row}>
-          <ThemedText>最新シーケンス</ThemedText>
-          <ThemedText type="defaultSemiBold">
-            {lastSocketEvent ? String(lastSocketEvent.sequence) : '0'}
-          </ThemedText>
-        </ThemedView>
-        <ThemedView style={styles.row}>
-          <ThemedText>最新イベント</ThemedText>
-          <ThemedText type="defaultSemiBold">
-            {lastSocketEvent ? lastSocketEvent.type : '-'}
-          </ThemedText>
-        </ThemedView>
-      </ThemedView>
+      <PairingStatusPanel
+        iosAlertMode={iosAlertMode}
+        isSocketConnected={isSocketConnected}
+        lastSocketEvent={lastSocketEvent}
+        onChangeIosAlertMode={setIosAlertMode}
+        pairResponse={pairResponse}
+        pairingInfo={pairingInfo}
+        showIosAlertMode={Platform.OS === "ios"}
+      />
     </ScrollView>
   );
 }
@@ -280,100 +185,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     gap: 16,
-  },
-  panel: {
-    padding: 16,
-    borderRadius: 18,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#d6e0da',
-    backgroundColor: '#f8fbf9',
-  },
-  description: {
-    color: '#5d6b66',
-  },
-  input: {
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: '#c8d6cf',
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: '#ffffff',
-    textAlignVertical: 'top',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    backgroundColor: 'transparent',
-  },
-  button: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#1f5c44',
-  },
-  buttonSecondary: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#3d7a63',
-  },
-  buttonMuted: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#6f8078',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    backgroundColor: 'transparent',
-  },
-  error: {
-    color: '#b54848',
-  },
-  scannerPanel: {
-    gap: 12,
-    backgroundColor: 'transparent',
-  },
-  camera: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  helperText: {
-    color: '#5d6b66',
-  },
-  modePanel: {
-    gap: 8,
-    backgroundColor: 'transparent',
-  },
-  modeButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    backgroundColor: 'transparent',
-  },
-  modeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#6f8078',
-  },
-  modeButtonActive: {
-    backgroundColor: '#1f5c44',
-  },
-  modeButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
   },
 });
 
@@ -398,16 +209,4 @@ function getAutoDeviceName(): string {
   }
 
   return `vibe-app (${Platform.OS})`;
-}
-
-function getPostureLabel(eventType: string | undefined): string {
-  if (eventType === "posture_bad") {
-    return "姿勢悪い";
-  }
-
-  if (eventType === "posture_good") {
-    return "姿勢いい";
-  }
-
-  return "-";
 }
