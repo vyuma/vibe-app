@@ -49,8 +49,10 @@ export default function PairingTestScreen() {
 
     setLocalError(null);
     setRawLink(link);
-    await startPairing(parsed.pairingInfo, getAutoDeviceName());
-    startSocket();
+    const paired = await startPairing(parsed.pairingInfo, getAutoDeviceName());
+    if (paired) {
+      startSocket();
+    }
   }
 
   async function handleOpenScanner() {
@@ -223,12 +225,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 999,
     backgroundColor: '#3d7a63',
-  },
-  buttonSubtle: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#4e8d75',
   },
   buttonMuted: {
     paddingHorizontal: 16,

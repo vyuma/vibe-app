@@ -1,7 +1,6 @@
 import type {
   DisconnectResponse,
   ErrorResponse,
-  HealthResponse,
   PairResponse,
   PairingInfo,
 } from "./types";
@@ -21,18 +20,6 @@ function getErrorMessage(payload: ErrorResponse | null, fallback: string) {
   }
 
   return `${payload.errorCode}: ${payload.message}`;
-}
-
-export async function fetchHealth(pairingInfo: PairingInfo): Promise<HealthResponse> {
-  const response = await fetch(
-    `http://${pairingInfo.host}:${pairingInfo.port}/health`,
-  );
-
-  if (!response.ok) {
-    throw new Error("ヘルスチェックに失敗しました");
-  }
-
-  return parseJsonResponse<HealthResponse>(response);
 }
 
 export async function pairDevice(

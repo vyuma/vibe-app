@@ -18,7 +18,6 @@ type PairingSessionState = {
   pairingInfo: PairingInfo | null;
   pairResponse: PairResponse | null;
   lastSocketEvent: PairingSocketEvent | null;
-  lastSequence: number;
   isPairing: boolean;
   isSocketConnected: boolean;
   error: string | null;
@@ -28,7 +27,6 @@ const defaultState: PairingSessionState = {
   pairingInfo: null,
   pairResponse: null,
   lastSocketEvent: null,
-  lastSequence: 0,
   isPairing: false,
   isSocketConnected: false,
   error: null,
@@ -62,13 +60,15 @@ export function usePairingSession() {
     };
   }, []);
 
-  async function startPairing(pairingInfo: PairingInfo, deviceName = DEFAULT_DEVICE_NAME) {
+  async function startPairing(
+    pairingInfo: PairingInfo,
+    deviceName = DEFAULT_DEVICE_NAME,
+  ): Promise<boolean> {
     setState((prev) => ({
       ...prev,
       pairingInfo,
       pairResponse: null,
       lastSocketEvent: null,
-      lastSequence: 0,
       isPairing: true,
       error: null,
     }));
@@ -83,12 +83,14 @@ export function usePairingSession() {
         isPairing: false,
         error: null,
       }));
+      return true;
     } catch (error) {
       setState((prev) => ({
         ...prev,
         isPairing: false,
         error: error instanceof Error ? error.message : "接続に失敗しました",
       }));
+      return false;
     }
   }
 
@@ -133,7 +135,6 @@ export function usePairingSession() {
         setState((prev) => ({
           ...prev,
           lastSocketEvent: parsed,
-          lastSequence: Math.max(prev.lastSequence, parsed.sequence),
           error: null,
         }));
       } catch {

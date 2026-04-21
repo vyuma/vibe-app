@@ -38,8 +38,3 @@ export type ErrorResponse = {
   errorCode: PairErrorCode;
   message: string;
 };
-
-export type HealthResponse = {
-  ok: true;
-  serverTime: string;
-};
