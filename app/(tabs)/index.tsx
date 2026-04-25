@@ -1,98 +1,125 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, View, Vibration } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const VIBE_INTERVAL = 80;
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [vibing, setVibing] = useState(false);
+  const vibingRef = useRef(false);
+  const scale = useRef(new Animated.Value(1)).current;
+  const hapticsTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loopAnim = useRef<Animated.CompositeAnimation | null>(null);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const startVibe = useCallback(() => {
+    if (vibingRef.current) return;
+    vibingRef.current = true;
+    setVibing(true);
+
+    loopAnim.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 0.88, duration: 60, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 60, useNativeDriver: true }),
+      ]),
+    );
+    loopAnim.current.start();
+
+    if (Platform.OS === 'android') {
+      Vibration.vibrate([0, 50, 30], true);
+    }
+
+    hapticsTimer.current = setInterval(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    }, VIBE_INTERVAL);
+  }, [scale]);
+
+  const stopVibe = useCallback(() => {
+    if (!vibingRef.current) return;
+    vibingRef.current = false;
+    setVibing(false);
+
+    if (loopAnim.current) {
+      loopAnim.current.stop();
+      loopAnim.current = null;
+    }
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 12,
+    }).start();
+
+    Vibration.cancel();
+
+    if (hapticsTimer.current) {
+      clearInterval(hapticsTimer.current);
+      hapticsTimer.current = null;
+    }
+  }, [scale]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => stopVibe();
+  }, [stopVibe]);
+
+  const toggleVibe = () => {
+    if (vibingRef.current) {
+      stopVibe();
+    } else {
+      startVibe();
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.hint}>タップで ON / OFF</Text>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Pressable
+          style={[styles.button, vibing && styles.buttonActive]}
+          onPress={toggleVibe}
+        >
+          <Text style={styles.label}>{vibing ? '振動中' : 'VIBE'}</Text>
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  hint: {
+    color: '#666',
+    fontSize: 14,
+    marginBottom: 32,
+    letterSpacing: 2,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  button: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7c3aed',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 30,
+    elevation: 20,
+  },
+  buttonActive: {
+    backgroundColor: '#a855f7',
+    shadowOpacity: 1,
+    shadowRadius: 50,
+  },
+  label: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 4,
   },
 });
