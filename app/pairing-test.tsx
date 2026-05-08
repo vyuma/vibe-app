@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from "expo-av";
 import {
   CameraView,
   useCameraPermissions,
@@ -35,6 +36,8 @@ import type { AcquiredCharacterPayload, PairingInfo } from "@/lib/pairing/types"
 const LOGO_WHITE_IMAGE = require("../assets/images/logo_white.png");
 const ANAGO_IMAGE = require("../assets/images/normal-nago.png");
 const QR_FRAME_IMAGE = require("../assets/images/QR.png");
+// 日本語: 姿勢アラート時のバイブと同期する携帯振動系SE（ループ再生）
+const VIBE_LOOP_SOUND = require("../assets/sounds/Cell_Phone-Vibration01-1(Cushion).mp3");
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 // Figma `mobile/ホーム` フレーム基準のキャンバス幅。
@@ -92,6 +95,7 @@ export default function PairingTestScreen() {
   const logoAnim = useRef(new Animated.Value(0)).current;
   const anagoAnim = useRef(new Animated.Value(0)).current;
   const measureVibeAnim = useRef(new Animated.Value(0)).current;
+  const vibeLoopSoundRef = useRef<Audio.Sound | null>(null);
   /** 同じ measurementId の再送でカード詳細モーダルを繰り返さない */
   const shownAcquisitionModalFor = useRef(new Set<string>());
   const hasHydratedAcquiredCards = useRef(false);
@@ -454,6 +458,49 @@ export default function PairingTestScreen() {
     return () => {
       clearInterval(intervalId);
       Vibration.cancel();
+    };
+  }, [hapticEnabled, isBadPosture, isSocketConnected]);
+
+  useEffect(() => {
+    if (!isSocketConnected || !isBadPosture || !hapticEnabled) {
+      const orphan = vibeLoopSoundRef.current;
+      vibeLoopSoundRef.current = null;
+      if (orphan) {
+        void orphan.stopAsync().then(() => orphan.unloadAsync()).catch(() => {});
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: false,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(VIBE_LOOP_SOUND, { isLooping: true });
+        if (cancelled) {
+          await sound.unloadAsync();
+          return;
+        }
+        vibeLoopSoundRef.current = sound;
+        await sound.playAsync();
+      } catch (e) {
+        console.warn("vibe loop sound failed", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      const s = vibeLoopSoundRef.current;
+      vibeLoopSoundRef.current = null;
+      if (s) {
+        void s.stopAsync().then(() => s.unloadAsync()).catch(() => {});
+      }
     };
   }, [hapticEnabled, isBadPosture, isSocketConnected]);
 
