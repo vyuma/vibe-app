@@ -40,9 +40,9 @@ export function PairingControlPanel({
 }: PairingControlPanelProps) {
   return (
     <ThemedView style={styles.panel}>
-      <ThemedText type="title">連携テスト</ThemedText>
+      <ThemedText type="title">モバイル連携</ThemedText>
       <ThemedText style={styles.description}>
-        デスクトップのペアリングリンクを貼り付けるか、QRコードを読み取ってすぐ接続できます。
+        デスクトップで表示した連携リンクを貼り付けるか、QRコードを読み取って接続してください。
       </ThemedText>
 
       <TextInput
@@ -50,13 +50,17 @@ export function PairingControlPanel({
         autoCorrect={false}
         multiline
         onChangeText={onChangeRawLink}
-        placeholder="vibeapp://pair?host=..."
+        placeholder="vibeapp://pair?host=...&port=...&token=..."
+        placeholderTextColor="rgba(86, 106, 112, 0.66)"
         style={styles.input}
         value={rawLink}
       />
 
       <ThemedView style={styles.buttonRow}>
-        <Pressable disabled={isPairing} onPress={onConnect} style={styles.button}>
+        <Pressable
+          disabled={isPairing}
+          onPress={onConnect}
+          style={[styles.button, isPairing && styles.buttonDisabled]}>
           <ThemedText style={styles.buttonText}>
             {isPairing ? "接続中..." : "接続"}
           </ThemedText>
@@ -64,13 +68,13 @@ export function PairingControlPanel({
         <Pressable
           disabled={isPairing}
           onPress={onOpenScanner}
-          style={styles.buttonSecondary}>
+          style={[styles.buttonSecondary, isPairing && styles.buttonDisabled]}>
           <ThemedText style={styles.buttonText}>QRをスキャン</ThemedText>
         </Pressable>
         <Pressable
           disabled={!isConnected}
           onPress={onDisconnect}
-          style={styles.buttonMuted}>
+          style={[styles.buttonMuted, !isConnected && styles.buttonDisabled]}>
           <ThemedText style={styles.buttonText}>切断</ThemedText>
         </Pressable>
       </ThemedView>
@@ -85,7 +89,7 @@ export function PairingControlPanel({
             />
           ) : null}
           <ThemedText style={styles.helperText}>
-            QRコード内の `vibeapp://pair?...` リンクを読み取ります。
+            QRコードに含まれる連携リンクを自動で読み取ります。
           </ThemedText>
           <Pressable onPress={onCloseScanner} style={styles.buttonMuted}>
             <ThemedText style={styles.buttonText}>スキャンを閉じる</ThemedText>
@@ -101,55 +105,60 @@ export function PairingControlPanel({
 
 const styles = StyleSheet.create({
   panel: {
-    padding: 16,
-    borderRadius: 18,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#d6e0da",
-    backgroundColor: "#f8fbf9",
+    padding: 20,
+    borderRadius: 24,
+    gap: 14,
+    borderWidth: 1.2,
+    borderColor: "rgba(255,255,255,0.46)",
+    backgroundColor: "rgba(255,255,255,0.88)",
   },
   description: {
-    color: "#5d6b66",
+    color: "#5b6d76",
+    lineHeight: 22,
   },
   input: {
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: "#c8d6cf",
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: "#ffffff",
+    minHeight: 112,
+    borderWidth: 1.2,
+    borderColor: "#cde2e9",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: "#f8fcff",
     textAlignVertical: "top",
   },
   buttonRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     backgroundColor: "transparent",
   },
   button: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: "#1f5c44",
+    backgroundColor: "#13a2d7",
   },
   buttonSecondary: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: "#3d7a63",
+    backgroundColor: "#34add5",
   },
   buttonMuted: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: "#6f8078",
+    backgroundColor: "#7f8f96",
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
   buttonText: {
     color: "#ffffff",
     fontWeight: "700",
   },
   error: {
-    color: "#b54848",
+    color: "#b93352",
   },
   scannerPanel: {
     gap: 12,
@@ -158,10 +167,10 @@ const styles = StyleSheet.create({
   camera: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: "hidden",
   },
   helperText: {
-    color: "#5d6b66",
+    color: "#5b6d76",
   },
 });
