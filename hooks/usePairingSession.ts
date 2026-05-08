@@ -7,21 +7,35 @@ import {
   pairDevice,
 } from "@/lib/pairing/client";
 import type {
+  AcquiredCharacterPayload,
   PairResponse,
   PairingInfo,
   PairingSocketEvent,
 } from "@/lib/pairing/types";
+import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
 
 const DEFAULT_DEVICE_NAME = "vibe-app";
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
+type LastAcquiredDispatch = { key: number; payload: AcquiredCharacterPayload };
+
+type AcquiredCharacterEventWithFlatPayload = PairingSocketEvent &
+  Partial<AcquiredCharacterPayload>;
+
 type PairingSessionState = {
   pairingInfo: PairingInfo | null;
   pairResponse: PairResponse | null;
   lastSocketEvent: PairingSocketEvent | null;
+  /**
+   * acquired_character 専用。lastSocketEvent は直後の measuring_stopped 等で上書きされるため、
+   * 獲得処理はここを購読する（欠落防止）。
+   */
+  lastAcquiredDispatch: LastAcquiredDispatch | null;
   isPairing: boolean;
   isSocketConnected: boolean;
+  /** PC の測定フェーズと同期（measuring_started / stopped / スナップショット） */
+  measuringSessionActive: boolean;
   error: string | null;
 };
 
@@ -29,8 +43,10 @@ const defaultState: PairingSessionState = {
   pairingInfo: null,
   pairResponse: null,
   lastSocketEvent: null,
+  lastAcquiredDispatch: null,
   isPairing: false,
   isSocketConnected: false,
+  measuringSessionActive: false,
   error: null,
 };
 
@@ -74,7 +90,9 @@ export function usePairingSession() {
       pairingInfo,
       pairResponse: null,
       lastSocketEvent: null,
+      lastAcquiredDispatch: null,
       isPairing: true,
+      measuringSessionActive: false,
       error: null,
     }));
 
@@ -172,11 +190,40 @@ export function usePairingSession() {
     socket.onmessage = (message) => {
       try {
         const parsed = JSON.parse(String(message.data)) as PairingSocketEvent;
-        setState((prev) => ({
-          ...prev,
-          lastSocketEvent: parsed,
-          error: null,
-        }));
+        if (
+          parsed.type === "acquired_character" &&
+          parsed.requiresAck &&
+          parsed.eventId
+        ) {
+          sendAckEvent(socket, parsed.eventId, parsed.sequence);
+        }
+        const acquiredPayload = toAcquiredPayload(parsed);
+        setState((prev) => {
+          let measuringSessionActive = prev.measuringSessionActive;
+          if (parsed.type === "measuring_started") {
+            measuringSessionActive = true;
+          } else if (parsed.type === "measuring_stopped") {
+            measuringSessionActive = false;
+          } else if (typeof parsed.measuringSessionActive === "boolean") {
+            measuringSessionActive = parsed.measuringSessionActive;
+          }
+
+          let lastAcquiredDispatch = prev.lastAcquiredDispatch;
+          if (acquiredPayload) {
+            lastAcquiredDispatch = {
+              key: (prev.lastAcquiredDispatch?.key ?? 0) + 1,
+              payload: acquiredPayload,
+            };
+          }
+
+          return {
+            ...prev,
+            lastSocketEvent: parsed,
+            lastAcquiredDispatch,
+            measuringSessionActive,
+            error: null,
+          };
+        });
       } catch {
         setState((prev) => ({
           ...prev,
@@ -199,12 +246,29 @@ export function usePairingSession() {
       setState((prev) => ({
         ...prev,
         isSocketConnected: false,
+        // 日本語: 切断中は測定 UI を残さない（古い measuring_started のままホームに戻れない問題を防ぐ）
+        measuringSessionActive: false,
       }));
 
       if (shouldKeepSocketRef.current) {
         scheduleReconnect();
       }
     };
+  }
+
+  function sendAckEvent(socket: WebSocket, eventId: string, sequence: number) {
+    if (socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    socket.send(
+      JSON.stringify({
+        type: "ack_event",
+        ackEventId: eventId,
+        ackSequence: sequence,
+        receivedAt: new Date().toISOString(),
+        status: "received",
+      }),
+    );
   }
 
   async function disconnect() {
@@ -283,5 +347,40 @@ export function usePairingSession() {
     startSocket,
     stopSocket,
     disconnect,
+  };
+}
+
+function toAcquiredPayload(parsed: PairingSocketEvent): AcquiredCharacterPayload | null {
+  if (parsed.type !== "acquired_character") {
+    return null;
+  }
+
+  if (parsed.payload?.measurementId && parsed.payload?.characterId) {
+    return {
+      ...parsed.payload,
+      characterId: normalizeCharacterId(parsed.payload.characterId),
+    };
+  }
+
+  const flat = parsed as AcquiredCharacterEventWithFlatPayload;
+  if (!flat.measurementId || !flat.characterId) {
+    return null;
+  }
+
+  return {
+    measurementId: flat.measurementId,
+    acquiredAt: flat.acquiredAt ?? parsed.createdAt,
+    characterId: normalizeCharacterId(flat.characterId),
+    characterName: flat.characterName ?? "？？？？？",
+    rarity: flat.rarity ?? "common",
+    activeMeasurementMs: flat.activeMeasurementMs,
+    goodMs: flat.goodMs,
+    goodRatio: flat.goodRatio,
+    postureTimeline: flat.postureTimeline,
+    story: flat.story,
+    portraitSrc: flat.portraitSrc,
+    personalityTags: flat.personalityTags,
+    characterColor: flat.characterColor,
+    toneClass: flat.toneClass,
   };
 }
