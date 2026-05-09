@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useMemo, useState } from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -33,6 +34,11 @@ export const DEFAULT_DETAIL_PORTRAIT_TUNING = {
   offsetY: 0,
 } as const;
 
+/** Figma Frame 51 / Frame 27 基準寸法 */
+const DETAIL_CARD_MAX_WIDTH = 310;
+const DETAIL_CARD_MIN_HEIGHT = 570;
+const DETAIL_PORTRAIT_FRAME = 262;
+
 export type DetailPortraitTuning = {
   widthRatio: number;
   heightRatio: number;
@@ -44,7 +50,7 @@ export type DetailPortraitTuning = {
 export type CharacterResultCardProps = {
   payload: AcquiredCharacterPayload;
   /**
-   * Figma mobile「カード詳細」モーダル内用：シート直下に載せ、二重の白カード枠を付けない。
+   * Figma mobile「カード詳細」：Frame 51 白カード＋獲得 UI。共有は親ヘッダー（カード外）。
    */
   detailLayout?: boolean;
   /**
@@ -53,11 +59,6 @@ export type CharacterResultCardProps = {
   scrollMaxHeight?: number;
   /** 未指定時は DEFAULT_DETAIL_PORTRAIT_TUNING（詳細レイアウト時のみ反映） */
   detailPortraitTune?: Partial<DetailPortraitTuning>;
-  /**
-   * カード詳細モーダルから渡す：画像キャプチャ（ヘッダー除外）共有。未指定時はテキスト共有。
-   * キャプチャは親の body 範囲。スクロール全量が長い場合、端末により画像がviewport相当に留まることがある（CharacterInfoModal 参照）。
-   */
-  onShareImage?: () => void | Promise<void>;
 };
 
 /**
@@ -69,25 +70,20 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   detailLayout = false,
   scrollMaxHeight,
   detailPortraitTune,
-  onShareImage,
 }: CharacterResultCardProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [detailCardInnerWidth, setDetailCardInnerWidth] = useState(0);
 
-  /** 詳細カード：paddingHorizontal 20×2 を除いた内側幅（onLayout 前のフォールバック付き） */
+  /** 詳細：Frame 51 内の左右 padding 24 を除いた幅（キャラ枠 262 の上限に使う） */
   const detailInnerContentWidth = useMemo(() => {
-    const fromLayout = detailCardInnerWidth;
-    if (fromLayout > 0) {
-      return fromLayout;
+    if (detailCardInnerWidth > 0) {
+      return detailCardInnerWidth;
     }
-    const sheetW = Math.min(windowWidth - 32, 400);
-    return Math.max(120, sheetW - 40);
+    const maxFrame = Math.min(DETAIL_CARD_MAX_WIDTH, Math.min(windowWidth - 32, 408));
+    return Math.max(100, maxFrame - 48);
   }, [detailCardInnerWidth, windowWidth]);
 
-  const detailPortraitMaxSide = 300;
-  const detailPortraitSquareSide = Math.min(detailInnerContentWidth, detailPortraitMaxSide);
-
-  const chartWidth = Math.min(windowWidth - (detailLayout ? 72 : 48), 342);
+  const detailPortraitSquareSide = Math.min(DETAIL_PORTRAIT_FRAME, detailInnerContentWidth);
 
   const primary = payload.characterColor?.primary ?? "#f78000";
   const soft = payload.characterColor?.soft ?? "#ffe8cc";
@@ -119,14 +115,6 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   const goodRatio = payload.goodRatio ?? 0;
 
   async function handleShare() {
-    if (detailLayout && onShareImage) {
-      try {
-        await onShareImage();
-      } catch {
-        /* キャンセル・キャプチャ失敗など */
-      }
-      return;
-    }
     const message = [
       payload.characterName,
       `良い姿勢時間: ${formatDuration(goodMs)}`,
@@ -141,59 +129,124 @@ export const CharacterResultCard = memo(function CharacterResultCard({
     }
   }
 
-  const cardStyle = detailLayout ? styles.cardDetailSheet : styles.card;
-  const portraitBg = detailLayout ? soft : `${soft}4D`;
-  const tagPillBg = `${primary}24`;
+  const portraitBg = detailLayout ? "rgba(247, 128, 0, 0.2)" : `${soft}4D`;
+  const tagPillBg = detailLayout ? "rgba(247, 128, 0, 0.2)" : `${primary}24`;
 
   const scrollStyle = scrollMaxHeight != null ? { maxHeight: scrollMaxHeight } : styles.scroll;
+
+  const pctInt = Math.round(Math.max(0, Math.min(1, goodRatio)) * 100);
+
+  if (detailLayout) {
+    return (
+      <ScrollView
+        style={scrollStyle}
+        contentContainerStyle={[styles.scrollContentDetail, styles.detailScrollContent]}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled>
+        <View
+          style={styles.detailFrame51}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            setDetailCardInnerWidth(Math.max(0, w - 48));
+          }}>
+          <View
+            style={[
+              styles.detailPortraitFrame,
+              {
+                width: detailPortraitSquareSide,
+                height: detailPortraitSquareSide,
+                backgroundColor: portraitBg,
+              },
+            ]}>
+            <View style={styles.portraitAligner}>
+              <Image
+                source={portraitSource}
+                style={{
+                  width: `${detailTune.widthRatio * 100}%`,
+                  height: `${detailTune.heightRatio * 100}%`,
+                  transform: [
+                    { scale: detailTune.scale },
+                    { translateX: detailTune.offsetX },
+                    { translateY: detailTune.offsetY },
+                  ],
+                }}
+                contentFit="contain"
+                contentPosition="center"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.detailCharacterName}>{payload.characterName}</Text>
+
+          <View style={styles.detailTagsRow}>
+            {tags.map((tag, index) => (
+              <View key={`${tag}-${index}`} style={[styles.detailTagPill, { backgroundColor: tagPillBg }]}>
+                <Text
+                  style={[styles.detailTagText, { color: primary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail">
+                  {tag}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.detailStatRow}>
+            <View style={styles.detailStatColLeft}>
+              <Text style={styles.detailStatLabel}>良い姿勢時間</Text>
+              <Text style={[styles.detailStatValueNum, { color: primary }]}>{formatDuration(goodMs)}</Text>
+            </View>
+            <View style={styles.detailStatColRight}>
+              <Text style={[styles.detailStatLabel, styles.detailStatLabelRight]}>良い姿勢率</Text>
+              <View style={styles.detailPercentRow}>
+                <Text style={[styles.detailStatValueNum, { color: primary }]}>{pctInt}</Text>
+                <Text style={[styles.detailPercentSymbol, { color: primary }]}>%</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.detailMetaBlock}>
+            <View style={styles.detailMetaRow}>
+              <View style={styles.detailMetaLeft}>
+                <Ionicons name="calendar-outline" size={16} color={primary} style={styles.detailMetaIcon} />
+                <Text style={styles.detailMetaLabel}>獲得日</Text>
+              </View>
+              <Text style={styles.detailMetaValue}>{formatAcquiredAt(payload.acquiredAt)}</Text>
+            </View>
+            <View style={styles.detailMetaRow}>
+              <View style={styles.detailMetaLeft}>
+                <Ionicons name="time-outline" size={16} color={primary} style={styles.detailMetaIcon} />
+                <Text style={styles.detailMetaLabel}>測定時間</Text>
+              </View>
+              <Text style={styles.detailMetaValue}>
+                {formatOptionalDuration(payload.activeMeasurementMs)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  const chartWidth = Math.min(windowWidth - 48, 342);
 
   return (
     <ScrollView
       style={scrollStyle}
-      contentContainerStyle={[styles.scrollContent, detailLayout && styles.scrollContentDetail]}
+      contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled>
-      <View
-        style={cardStyle}
-        onLayout={
-          detailLayout
-            ? (e) => {
-                const outer = e.nativeEvent.layout.width;
-                setDetailCardInnerWidth(Math.max(0, outer - 40));
-              }
-            : undefined
-        }>
+      <View style={styles.card}>
         <View
           style={[
             styles.portraitWrapCommon,
-            !detailLayout && styles.portraitWrapGrid,
-            detailLayout && styles.portraitWrapDetail,
-            detailLayout && {
-              width: detailPortraitSquareSide,
-              height: detailPortraitSquareSide,
-              alignSelf: "center",
-            },
+            styles.portraitWrapGrid,
             { backgroundColor: portraitBg },
           ]}>
           <View style={styles.portraitAligner}>
-            <Image
-              source={portraitSource}
-              style={
-                detailLayout
-                  ? {
-                      width: `${detailTune.widthRatio * 100}%`,
-                      height: `${detailTune.heightRatio * 100}%`,
-                      transform: [
-                        { scale: detailTune.scale },
-                        { translateX: detailTune.offsetX },
-                        { translateY: detailTune.offsetY },
-                      ],
-                    }
-                  : styles.portrait
-              }
-              contentFit="contain"
-              contentPosition="center"
-            />
+            <Image source={portraitSource} style={styles.portrait} contentFit="contain" contentPosition="center" />
           </View>
         </View>
 
@@ -214,7 +267,12 @@ export const CharacterResultCard = memo(function CharacterResultCard({
             <View
               key={`${tag}-${index}`}
               style={[styles.tagPill, { backgroundColor: tagPillBg }]}>
-              <Text style={[styles.tagText, { color: primary }]}>{tag}</Text>
+              <Text
+                style={[styles.tagText, { color: primary }]}
+                numberOfLines={1}
+                ellipsizeMode="tail">
+                {tag}
+              </Text>
             </View>
           ))}
         </View>
@@ -277,6 +335,154 @@ const styles = StyleSheet.create({
   scrollContentDetail: {
     paddingBottom: 28,
   },
+  /** モーダル body 上で Frame 51 を中央に置く */
+  detailScrollContent: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingHorizontal: 8,
+  },
+  /** Figma Frame 51（獲得カード本体） */
+  detailFrame51: {
+    width: "100%",
+    maxWidth: DETAIL_CARD_MAX_WIDTH,
+    minWidth: 0,
+    minHeight: DETAIL_CARD_MIN_HEIGHT,
+    alignSelf: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8.52,
+      },
+      android: {
+        elevation: 5,
+      },
+      default: {},
+    }),
+  },
+  /** Figma Frame 27 */
+  detailPortraitFrame: {
+    borderRadius: 24,
+    overflow: "hidden",
+    alignSelf: "center",
+  },
+  detailCharacterName: {
+    marginTop: 16,
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: "700",
+    color: "#000000",
+  },
+  detailTagsRow: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    gap: 8,
+    marginTop: 16,
+    width: "100%",
+    minWidth: 0,
+  },
+  detailTagPill: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 100,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailTagText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "700",
+    width: "100%",
+    textAlign: "center",
+  },
+  detailStatRow: {
+    flexDirection: "row",
+    marginTop: 24,
+    alignItems: "flex-start",
+  },
+  detailStatColLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailStatColRight: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
+  detailStatLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: "#666666",
+  },
+  detailStatLabelRight: {
+    width: "100%",
+    textAlign: "right",
+  },
+  detailStatValueNum: {
+    marginTop: 4,
+    fontSize: 48,
+    lineHeight: 57,
+    fontWeight: "700",
+  },
+  detailPercentRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+  },
+  detailPercentSymbol: {
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: "700",
+    marginLeft: 2,
+    paddingBottom: 4,
+  },
+  detailDivider: {
+    marginTop: 28,
+    height: 1,
+    backgroundColor: "#DDDDDD",
+  },
+  detailMetaBlock: {
+    marginTop: 16,
+    gap: 16,
+  },
+  detailMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  detailMetaLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  detailMetaIcon: {
+    marginRight: 8,
+  },
+  detailMetaLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: "#666666",
+  },
+  detailMetaValue: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: "#000000",
+    textAlign: "right",
+    flexShrink: 0,
+    marginLeft: 12,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 32,
@@ -285,15 +491,8 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     width: "100%",
     maxWidth: 400,
+    minWidth: 0,
     alignSelf: "center",
-  },
-  /** Figma「カード詳細」：モーダルシートと一体になるフラットなブロック */
-  cardDetailSheet: {
-    width: "100%",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
-    alignSelf: "stretch",
   },
   portraitWrapCommon: {
     overflow: "hidden",
@@ -306,10 +505,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     maxHeight: 280,
     alignSelf: "stretch",
-  },
-  /** 詳細：角丸のみ（一辺は onLayout で中央配置） */
-  portraitWrapDetail: {
-    borderRadius: 32,
   },
   /** 代表色ブロック内でキャラを左右中央に置く（Y は従来どおり central のまま、offsetY で微調整可） */
   portraitAligner: {
@@ -332,6 +527,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     flex: 1,
+    minWidth: 0,
     paddingRight: 8,
     color: "#000000",
   },
@@ -343,18 +539,26 @@ const styles = StyleSheet.create({
   },
   tagsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 8,
     marginTop: 12,
+    width: "100%",
+    minWidth: 0,
   },
   tagPill: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tagText: {
     fontSize: 13,
     fontWeight: "700",
+    width: "100%",
+    textAlign: "center",
   },
   statGrid: {
     flexDirection: "row",

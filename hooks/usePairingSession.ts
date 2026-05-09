@@ -36,6 +36,8 @@ type PairingSessionState = {
   isSocketConnected: boolean;
   /** PC の測定フェーズと同期（measuring_started / stopped / スナップショット） */
   measuringSessionActive: boolean;
+  /** PC で良い姿勢登録フロー中（専用イベントまたはスナップショットのフラグ） */
+  goodPostureRegistrationActive: boolean;
   error: string | null;
 };
 
@@ -47,6 +49,7 @@ const defaultState: PairingSessionState = {
   isPairing: false,
   isSocketConnected: false,
   measuringSessionActive: false,
+  goodPostureRegistrationActive: false,
   error: null,
 };
 
@@ -93,6 +96,7 @@ export function usePairingSession() {
       lastAcquiredDispatch: null,
       isPairing: true,
       measuringSessionActive: false,
+      goodPostureRegistrationActive: false,
       error: null,
     }));
 
@@ -200,12 +204,26 @@ export function usePairingSession() {
         const acquiredPayload = toAcquiredPayload(parsed);
         setState((prev) => {
           let measuringSessionActive = prev.measuringSessionActive;
+          let goodPostureRegistrationActive = prev.goodPostureRegistrationActive;
           if (parsed.type === "measuring_started") {
             measuringSessionActive = true;
+            goodPostureRegistrationActive = false;
           } else if (parsed.type === "measuring_stopped") {
             measuringSessionActive = false;
           } else if (typeof parsed.measuringSessionActive === "boolean") {
             measuringSessionActive = parsed.measuringSessionActive;
+          }
+
+          if (parsed.type === "good_posture_registration_started") {
+            goodPostureRegistrationActive = true;
+          } else if (parsed.type === "good_posture_registration_stopped") {
+            goodPostureRegistrationActive = false;
+          } else if (typeof parsed.goodPostureRegistrationActive === "boolean") {
+            goodPostureRegistrationActive = parsed.goodPostureRegistrationActive;
+          }
+
+          if (measuringSessionActive) {
+            goodPostureRegistrationActive = false;
           }
 
           let lastAcquiredDispatch = prev.lastAcquiredDispatch;
@@ -221,6 +239,7 @@ export function usePairingSession() {
             lastSocketEvent: parsed,
             lastAcquiredDispatch,
             measuringSessionActive,
+            goodPostureRegistrationActive,
             error: null,
           };
         });
@@ -248,6 +267,7 @@ export function usePairingSession() {
         isSocketConnected: false,
         // 日本語: 切断中は測定 UI を残さない（古い measuring_started のままホームに戻れない問題を防ぐ）
         measuringSessionActive: false,
+        goodPostureRegistrationActive: false,
       }));
 
       if (shouldKeepSocketRef.current) {

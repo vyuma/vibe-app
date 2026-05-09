@@ -1,4 +1,5 @@
 import * as Sharing from "expo-sharing";
+import { Image } from "expo-image";
 import { useCallback, useRef, useState } from "react";
 import {
   Modal,
@@ -103,12 +104,26 @@ export function CharacterInfoModal({ visible, payload, onClose }: CharacterInfoM
               style={styles.header}
               onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
               <Text style={styles.title}>カード詳細</Text>
-              <Pressable
-                onPress={onClose}
-                hitSlop={10}
-                style={({ pressed }) => pressed && styles.closePressed}>
-                <Text style={styles.closeText}>閉じる</Text>
-              </Pressable>
+              <View style={styles.headerRight}>
+                <Pressable
+                  onPress={() => void captureAndShareBody()}
+                  accessibilityRole="button"
+                  accessibilityLabel="カード画像を共有"
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.shareFab, pressed && styles.shareFabPressed]}>
+                  <Image
+                    source={require("@/assets/images/share.png")}
+                    style={styles.shareFabIcon}
+                    contentFit="contain"
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={onClose}
+                  hitSlop={10}
+                  style={({ pressed }) => pressed && styles.closePressed}>
+                  <Text style={styles.closeText}>閉じる</Text>
+                </Pressable>
+              </View>
             </View>
             <View ref={bodyCaptureRef} style={styles.body} collapsable={false}>
               <CharacterResultCard
@@ -116,7 +131,6 @@ export function CharacterInfoModal({ visible, payload, onClose }: CharacterInfoM
                 detailLayout
                 scrollMaxHeight={cardScrollMaxHeight}
                 detailPortraitTune={DETAIL_MODAL_PORTRAIT_TUNE}
-                onShareImage={captureAndShareBody}
               />
             </View>
           </View>
@@ -158,6 +172,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(0,0,0,0.06)",
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: px(12),
+  },
+  /** 共有は Frame 51 外（ヘッダー）。参照デザインの円形ボタン */
+  shareFab: {
+    width: px(40),
+    height: px(40),
+    borderRadius: px(20),
+    backgroundColor: "rgba(74, 144, 226, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareFabPressed: {
+    opacity: 0.72,
+  },
+  shareFabIcon: {
+    width: px(20),
+    height: px(20),
+  },
   title: {
     fontSize: px(17),
     fontWeight: "700",
@@ -174,6 +209,6 @@ const styles = StyleSheet.create({
   },
   body: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#EDF1F6",
   },
 });

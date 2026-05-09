@@ -23,7 +23,9 @@ export type PairingSocketEvent = {
     | "acquired_character"
     | "acquired_characters_cleared"
     | "measuring_started"
-    | "measuring_stopped";
+    | "measuring_stopped"
+    | "good_posture_registration_started"
+    | "good_posture_registration_stopped";
   sequence: number;
   paired: boolean;
   deviceName: string | null;
@@ -31,6 +33,8 @@ export type PairingSocketEvent = {
   createdAt: string;
   /** PC 側フローが measuring のとき true（スナップショットや各種 WS イベントに含まれる） */
   measuringSessionActive?: boolean;
+  /** PC で「良い姿勢」の登録・キャリブレーション中のとき true（スナップショット等に含めてもよい） */
+  goodPostureRegistrationActive?: boolean;
   eventId?: string;
   requiresAck?: boolean;
   payload?: AcquiredCharacterPayload;
