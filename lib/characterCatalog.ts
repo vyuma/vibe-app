@@ -1,3 +1,5 @@
+import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
+
 /** PC の `CharacterDefinition` に対応（モバイル表示用の最小フィールド） */
 export type CharacterCatalogEntry = {
   id: string;
@@ -83,4 +85,10 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
 export function getCatalogEntryAtSlotIndex(slotIndex: number): CharacterCatalogEntry | null {
   const entry = CHARACTER_CATALOG[slotIndex];
   return entry ?? null;
+}
+
+/** `characterId`（エイリアス含む）に一致するカタログ行。WS ペイロードに色が無いときのフォールバック用。 */
+export function getCatalogEntryByCharacterId(characterId: string): CharacterCatalogEntry | null {
+  const needle = normalizeCharacterId(characterId);
+  return CHARACTER_CATALOG.find((e) => e.id === needle) ?? null;
 }

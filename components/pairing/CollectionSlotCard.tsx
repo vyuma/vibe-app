@@ -145,49 +145,60 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
         styles.cardBase,
         styles.acquiredCardLayout,
         acquiredCardStyle,
-        { width, height, borderRadius, paddingTop: contentInset },
+        { width, height, borderRadius },
         pressed && styles.acquiredPressed,
       ]}
       accessibilityRole="button"
       accessibilityLabel={`${character.name}のカード情報を開く`}>
-      <View
-        style={[
-          styles.previewBlock,
-          {
-            width: previewSide,
-            height: previewSide,
-            borderRadius: previewRadius,
-            backgroundColor: `${soft}55`,
-          },
-        ]}>
-        <Image
-          source={portraitSource}
+      {/* 影は Pressable（overflow visible）、中身は角丸でクリップ */}
+      <View style={[styles.acquiredClip, { borderRadius, paddingTop: contentInset }]}>
+        <View
           style={[
-            styles.portraitFill,
+            styles.previewBlock,
             {
-              transform: [
-                { scale: portraitTune.scale },
-                { translateX: portraitTune.offsetX },
-                { translateY: portraitTune.offsetY },
-              ],
+              width: previewSide,
+              height: previewSide,
+              borderRadius: previewRadius,
+              backgroundColor: `${soft}55`,
             },
-          ]}
-          contentFit="contain"
-          contentPosition="center"
-        />
-      </View>
-      <View style={[styles.metaBlock, { width: previewSide }]}>
-        <Text style={styles.characterName} numberOfLines={1}>
-          {character.name}
-        </Text>
-        <View style={styles.tagsRow}>
-          {tags.map((tag) => (
-            <View key={tag} style={[styles.tagPill, { backgroundColor: `${primary}28` }]}>
-              <Text style={[styles.tagText, { color: primary }]} numberOfLines={1}>
-                {tag}
-              </Text>
-            </View>
-          ))}
+          ]}>
+          <Image
+            source={portraitSource}
+            style={[
+              styles.portraitFill,
+              {
+                transform: [
+                  { scale: portraitTune.scale },
+                  { translateX: portraitTune.offsetX },
+                  { translateY: portraitTune.offsetY },
+                ],
+              },
+            ]}
+            contentFit="contain"
+            contentPosition="center"
+          />
+        </View>
+        <View style={[styles.metaBlock, { width: previewSide }]}>
+          <Text
+            style={styles.characterName}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {character.name}
+          </Text>
+          <View style={styles.tagsRow}>
+            {tags.map((tag, index) => (
+              <View
+                key={`${tag}-${index}`}
+                style={[styles.tagPill, { backgroundColor: `${primary}28` }]}>
+                <Text
+                  style={[styles.tagText, { color: primary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail">
+                  {tag}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
     </Pressable>
@@ -213,6 +224,14 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     overflow: "visible",
   },
+  /** 角丸内にテキストを収める（Pressable 側は影用に visible のまま） */
+  acquiredClip: {
+    flex: 1,
+    overflow: "hidden",
+    alignItems: "center",
+    minWidth: 0,
+    width: "100%",
+  },
   /** ピーチ枠：正円近いスクエア・はみ出しクリップ */
   previewBlock: {
     alignSelf: "center",
@@ -230,6 +249,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingTop: 6,
     justifyContent: "flex-start",
+    minWidth: 0,
   },
   characterName: {
     fontSize: 14,
@@ -239,18 +259,25 @@ const styles = StyleSheet.create({
   },
   tagsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 4,
     marginTop: 4,
+    width: "100%",
+    minWidth: 0,
   },
   tagPill: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 999,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 3,
-    maxWidth: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   tagText: {
     fontSize: 10,
     fontWeight: "700",
+    width: "100%",
+    textAlign: "center",
   },
 });
