@@ -19,6 +19,7 @@ import {
   formatOptionalDuration,
   formatPercent,
 } from "@/lib/formatMeasurement";
+import { getCatalogEntryByCharacterId } from "@/lib/characterCatalog";
 import type { AcquiredCharacterPayload } from "@/lib/pairing/types";
 import { resolveCharacterPortraitSource } from "@/lib/resolveCharacterPortrait";
 
@@ -85,8 +86,12 @@ export const CharacterResultCard = memo(function CharacterResultCard({
 
   const detailPortraitSquareSide = Math.min(DETAIL_PORTRAIT_FRAME, detailInnerContentWidth);
 
-  const primary = payload.characterColor?.primary ?? "#f78000";
-  const soft = payload.characterColor?.soft ?? "#ffe8cc";
+  const catalogColors = useMemo(
+    () => getCatalogEntryByCharacterId(payload.characterId)?.characterColor,
+    [payload.characterId],
+  );
+  const primary = payload.characterColor?.primary ?? catalogColors?.primary ?? "#f78000";
+  const soft = payload.characterColor?.soft ?? catalogColors?.soft ?? "#ffe8cc";
   const portraitSource = useMemo(
     () => resolveCharacterPortraitSource(payload.characterId),
     [payload.characterId],
@@ -129,8 +134,9 @@ export const CharacterResultCard = memo(function CharacterResultCard({
     }
   }
 
-  const portraitBg = detailLayout ? "rgba(247, 128, 0, 0.2)" : `${soft}4D`;
-  const tagPillBg = detailLayout ? "rgba(247, 128, 0, 0.2)" : `${primary}24`;
+  /** detailLayout でもキャラ色を使う（旧: オレンジ固定でピンクキャラが誤表示になっていた） */
+  const portraitBg = `${soft}4D`;
+  const tagPillBg = `${primary}24`;
 
   const scrollStyle = scrollMaxHeight != null ? { maxHeight: scrollMaxHeight } : styles.scroll;
 
@@ -415,7 +421,7 @@ const styles = StyleSheet.create({
   detailStatColRight: {
     flex: 1,
     minWidth: 0,
-    alignItems: "flex-end",
+    alignItems: "flex-start",
   },
   detailStatLabel: {
     fontSize: 10,
@@ -425,7 +431,7 @@ const styles = StyleSheet.create({
   },
   detailStatLabelRight: {
     width: "100%",
-    textAlign: "right",
+    textAlign: "left",
   },
   detailStatValueNum: {
     marginTop: 4,
@@ -434,10 +440,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   detailPercentRow: {
-    marginTop: 4,
     flexDirection: "row",
     alignItems: "flex-end",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   },
   detailPercentSymbol: {
     fontSize: 24,
