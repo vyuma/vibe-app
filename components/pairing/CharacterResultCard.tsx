@@ -85,6 +85,15 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   }, [detailCardInnerWidth, windowWidth]);
 
   const detailPortraitSquareSide = Math.min(DETAIL_PORTRAIT_FRAME, detailInnerContentWidth);
+  /** 日本語: 狭いモーダル幅でも数値がはみ出さないよう上限を連動 */
+  const detailStatNumFont = useMemo(
+    () => Math.min(48, Math.max(26, detailInnerContentWidth * 0.13)),
+    [detailInnerContentWidth],
+  );
+  const detailPercentNumFont = useMemo(
+    () => Math.min(24, Math.max(14, detailStatNumFont * 0.5)),
+    [detailStatNumFont],
+  );
 
   const catalogColors = useMemo(
     () => getCatalogEntryByCharacterId(payload.characterId)?.characterColor,
@@ -200,13 +209,40 @@ export const CharacterResultCard = memo(function CharacterResultCard({
           <View style={styles.detailStatRow}>
             <View style={styles.detailStatColLeft}>
               <Text style={styles.detailStatLabel}>良い姿勢時間</Text>
-              <Text style={[styles.detailStatValueNum, { color: primary }]}>{formatDuration(goodMs)}</Text>
+              <Text
+                style={[
+                  styles.detailStatValueNum,
+                  { color: primary, fontSize: detailStatNumFont, lineHeight: detailStatNumFont * 1.15 },
+                ]}>
+                {formatDuration(goodMs)}
+              </Text>
             </View>
             <View style={styles.detailStatColRight}>
               <Text style={[styles.detailStatLabel, styles.detailStatLabelRight]}>良い姿勢率</Text>
               <View style={styles.detailPercentRow}>
-                <Text style={[styles.detailStatValueNum, { color: primary }]}>{pctInt}</Text>
-                <Text style={[styles.detailPercentSymbol, { color: primary }]}>%</Text>
+                <Text
+                  style={[
+                    styles.detailStatValueNum,
+                    {
+                      color: primary,
+                      fontSize: detailPercentNumFont,
+                      lineHeight: detailPercentNumFont * 1.15,
+                    },
+                  ]}>
+                  {pctInt}
+                </Text>
+                <Text
+                  style={[
+                    styles.detailPercentSymbol,
+                    {
+                      color: primary,
+                      fontSize: detailPercentNumFont * 0.5,
+                      lineHeight: detailPercentNumFont * 0.6,
+                      paddingBottom: detailPercentNumFont * 0.12,
+                    },
+                  ]}>
+                  %
+                </Text>
               </View>
             </View>
           </View>

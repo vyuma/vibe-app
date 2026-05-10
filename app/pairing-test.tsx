@@ -54,6 +54,8 @@ const AnimatedImage = Animated.createAnimatedComponent(Image);
 // Figma `mobile/ホーム` フレーム基準のキャンバス幅。
 const DESIGN_WIDTH = 390;
 const DESIGN_HEIGHT = 844;
+/** 日本語: タブレット・ブラウザ幅でコラムを広げすぎない（Figma 390 付近を維持） */
+const MAX_PAIRING_LAYOUT_WIDTH = 456;
 const COLLECTION_TOTAL = 111;
 const COLLECTION_PAGE_SIZE = 8;
 
@@ -162,29 +164,71 @@ export default function PairingTestScreen() {
   }, []);
 
   const isConnected = Boolean(pairResponse);
+  const longEdge = Math.max(width, height);
   const shortEdge = Math.min(width, height);
-  const responsiveScale = clamp(width / DESIGN_WIDTH, 0.86, 1.24);
-  const sx = useCallback((value: number) => value * responsiveScale, [responsiveScale]);
-  const heroHeight = clamp(height * 0.41, sx(300), sx(410));
-  const logoWidth = clamp(width * 0.72, sx(220), sx(300));
+  const isLandscape = width > height;
+  const layoutWidth = Math.min(width, MAX_PAIRING_LAYOUT_WIDTH);
+  const layoutScale = clamp(shortEdge / DESIGN_WIDTH, 0.78, 1.24);
+  const sx = useCallback((value: number) => value * layoutScale, [layoutScale]);
+  const heroHeight = clamp(
+    isLandscape ? shortEdge * 0.4 : longEdge * 0.41,
+    sx(isLandscape ? 220 : 280),
+    sx(isLandscape ? 340 : 410),
+  );
+  const logoWidth = clamp(layoutWidth * 0.72, sx(220), sx(300));
   const logoHeight = logoWidth * (100 / 280);
   const logoTop = clamp(heroHeight * 0.12, sx(30), sx(64));
-  const qrButtonWidth = clamp(width * 0.44, sx(148), sx(190));
-  const qrButtonHeight = clamp(height * 0.06, sx(46), sx(56));
-  const qrLeft = clamp(width * 0.095, sx(20), sx(44));
+  const qrButtonWidth = clamp(layoutWidth * 0.44, sx(148), sx(190));
+  const qrButtonHeight = clamp(longEdge * 0.06, sx(46), sx(56));
+  const qrLeft = clamp(layoutWidth * 0.095, sx(20), sx(44));
   const qrTop = clamp(heroHeight * 0.45, sx(130), sx(188));
-  const qrHintTop = qrTop + qrButtonHeight + sx(14);
-  const qrHintWidth = clamp(width * 0.46, sx(160), sx(220));
+  const qrHintWidth = clamp(layoutWidth * 0.46, sx(160), sx(220));
   const qrButtonRadius = clamp(qrButtonHeight / 2, sx(23), sx(30));
-  const qrButtonLabelFont = clamp(width * 0.041, sx(14), sx(18));
+  const qrButtonLabelFont = clamp(layoutWidth * 0.041, sx(14), sx(18));
   const qrButtonLabelLine = qrButtonLabelFont * 1.2;
-  const qrHintFont = clamp(width * 0.031, sx(11), sx(14));
+  const qrHintFont = clamp(layoutWidth * 0.031, sx(11), sx(14));
   const qrHintLine = clamp(qrHintFont * 1.8, sx(18), sx(26));
-  const anagoWidth = clamp(width * 0.29, sx(96), sx(132));
+  const anagoWidth = clamp(layoutWidth * 0.29, sx(96), sx(132));
   const anagoHeight = anagoWidth * (176 / 112);
   const anagoTop = clamp(heroHeight * 0.39, sx(122), sx(194));
-  const anagoRight = clamp(width * -0.02, -sx(10), sx(4));
-  const contentMinHeight = Math.max(height - insets.top, sx(DESIGN_HEIGHT));
+  const anagoRight = clamp(layoutWidth * -0.02, -sx(10), sx(4));
+  // 日本語: ヒーロー内で QR・案内文がはみ出さないよう詰める（低い画面・横向き）
+  const heroPackBottom = heroHeight - sx(10);
+  let heroLogoTop = logoTop;
+  let heroQrTop = Math.max(qrTop, heroLogoTop + logoHeight + sx(8));
+  let heroQrHintTop = heroQrTop + qrButtonHeight + sx(14);
+  let heroQrHintFont = qrHintFont;
+  let heroQrHintLine = qrHintLine;
+  const heroHintLines = 2;
+  const recomputeHeroHintTop = () => {
+    heroQrHintTop = heroQrTop + qrButtonHeight + sx(14);
+  };
+  if (heroQrHintTop + heroHintLines * heroQrHintLine > heroPackBottom) {
+    heroQrHintLine = Math.max(sx(14), (heroPackBottom - heroQrHintTop) / heroHintLines);
+    heroQrHintFont = clamp(heroQrHintLine / 1.8, sx(10), qrHintFont);
+    heroQrHintLine = heroQrHintFont * 1.8;
+  }
+  if (heroQrHintTop + heroHintLines * heroQrHintLine > heroPackBottom) {
+    const overflow = heroQrHintTop + heroHintLines * heroQrHintLine - heroPackBottom;
+    heroQrTop = Math.max(heroLogoTop + logoHeight + sx(4), heroQrTop - overflow);
+    recomputeHeroHintTop();
+  }
+  if (heroQrHintTop + heroHintLines * heroQrHintLine > heroPackBottom) {
+    const overflow = heroQrHintTop + heroHintLines * heroQrHintLine - heroPackBottom;
+    heroLogoTop = Math.max(sx(8), heroLogoTop - overflow);
+    heroQrTop = Math.max(heroLogoTop + logoHeight + sx(4), qrTop);
+    recomputeHeroHintTop();
+    if (heroQrHintTop + heroHintLines * heroQrHintLine > heroPackBottom) {
+      heroQrHintLine = Math.max(sx(14), (heroPackBottom - heroQrHintTop) / heroHintLines);
+      heroQrHintFont = clamp(heroQrHintLine / 1.8, sx(10), qrHintFont);
+      heroQrHintLine = heroQrHintFont * 1.8;
+    }
+  }
+  let heroAnagoTop = anagoTop;
+  if (heroAnagoTop + anagoHeight > heroHeight - sx(2)) {
+    heroAnagoTop = Math.max(sx(36), heroHeight - sx(2) - anagoHeight);
+  }
+  const contentMinHeight = Math.max(longEdge - insets.top, sx(DESIGN_HEIGHT));
   // 日本語: Figma モバイル（390 幅）基準の値を等比スケールで固定する。
   // 日本語: コレクションカード幅をわずかに確保（長い性格タグの余裕）
   const collectionPaddingHorizontal = sx(30);
@@ -201,9 +245,9 @@ export default function PairingTestScreen() {
   const collectionCountLine = sx(38);
   const collectionSubFont = sx(16);
   const collectionSubLine = sx(19);
-  const collectionGap = clamp(width * 0.042, sx(11), sx(18));
+  const collectionGap = clamp(layoutWidth * 0.042, sx(11), sx(18));
   const collectionCardWidth =
-    (width - collectionPaddingHorizontal * 2 - collectionGap) / 2;
+    (layoutWidth - collectionPaddingHorizontal * 2 - collectionGap) / 2;
   const collectionCardHeight = collectionCardWidth * (199 / 152.72);
   const collectionCardRadius = clamp(collectionCardWidth * 0.125, sx(14), sx(24));
   const collectionCardLabelFont = clamp(collectionCardWidth * 0.18, sx(22), sx(32));
@@ -212,14 +256,14 @@ export default function PairingTestScreen() {
   const collectionCardLabelBoxHeight = collectionCardHeight * (33 / 199);
   const collectionGridMarginTop = clamp(height * 0.012, sx(8), sx(14));
   const collectionMoreMarginTop = clamp(height * 0.018, sx(10), sx(16));
-  const collectionMorePadX = clamp(width * 0.041, sx(12), sx(18));
+  const collectionMorePadX = clamp(layoutWidth * 0.041, sx(12), sx(18));
   const collectionMorePadY = clamp(height * 0.01, sx(6), sx(10));
-  const collectionMoreFont = clamp(width * 0.033, sx(11), sx(14));
+  const collectionMoreFont = clamp(layoutWidth * 0.033, sx(11), sx(14));
   const errorMarginTop = clamp(height * 0.012, sx(8), sx(12));
-  const errorFont = clamp(width * 0.034, sx(12), sx(14));
-  const measureCardSize = clamp(width * 0.82, sx(300), sx(352));
+  const errorFont = clamp(layoutWidth * 0.034, sx(12), sx(14));
+  const measureCardSize = clamp(layoutWidth * 0.82, sx(300), sx(352));
   const measureCardRadius = clamp(measureCardSize * 0.075, sx(20), sx(28));
-  const measureTitleFont = clamp(width * 0.082, sx(28), sx(36));
+  const measureTitleFont = clamp(layoutWidth * 0.082, sx(28), sx(36));
   const measureTitleLine = measureTitleFont * 1.18;
   const measureTitleTop = measureCardSize * (28 / 320);
   // 日本語: トグル行は Figma 基準 y=88（320 フレーム基準）に固定する。
@@ -229,7 +273,7 @@ export default function PairingTestScreen() {
   const measureToggleLeft = (measureCardSize - measureToggleWidth) / 2;
   const measureToggleRadius = clamp(measureToggleHeight * 0.26, sx(14), sx(20));
   const measureTogglePadX = measureCardSize * (24 / 320);
-  const measureToggleFont = clamp(width * 0.054, sx(18), sx(22));
+  const measureToggleFont = clamp(layoutWidth * 0.054, sx(18), sx(22));
   const measureToggleLine = measureToggleFont * 1.2;
   const measureAnagoWidth = measureCardSize * (96 / 320);
   const measureAnagoHeight = measureCardSize * (144 / 320);
@@ -238,9 +282,18 @@ export default function PairingTestScreen() {
   // 日本語: 「測定中」見出しに対して約 3/4 の見え方になるようロゴ幅を連動させる。
   const measureLogoWidth = clamp(measureTitleFont * 3.4, sx(150), sx(220));
   const measureLogoHeight = measureLogoWidth * (19.5 / 56);
-  // 日本語: ロゴをさらに上へ 40 相当シフトする。
-  const measureLogoTop = insets.top + clamp(height * (10 / 844), sx(6), sx(14)) - sx(40);
-  const measureContentTopPadding = insets.top + clamp(height * 0.16, sx(108), sx(190));
+  // 日本語: ロゴをさらに上へ 40 相当シフトする。ノッチと被らないよう下限を付ける。
+  const measureLogoTop = Math.max(
+    insets.top + sx(6),
+    insets.top + clamp(longEdge * (10 / 844), sx(6), sx(14)) - sx(40),
+  );
+  const measureContentTopPadding =
+    insets.top +
+    clamp(
+      isLandscape ? shortEdge * 0.1 : longEdge * 0.16,
+      isLandscape ? sx(48) : sx(96),
+      isLandscape ? sx(120) : sx(190),
+    );
   const registerCardSize = measureCardSize;
   const registerCardRadius = measureCardRadius;
   const registerTitleFont = sx(24);
@@ -261,17 +314,17 @@ export default function PairingTestScreen() {
   const shouldVibeAnimate = isMeasuring && isBadPosture && hapticEnabled;
 
   const highlightQrForLink = !pairResponse && !isPairing;
-  const connectionBannerFont = clamp(width * 0.032, sx(11), sx(13));
+  const connectionBannerFont = clamp(layoutWidth * 0.032, sx(11), sx(13));
   const connectionBannerLine = connectionBannerFont * 1.45;
   // 日本語: 端末サイズ差を吸収するため、ガイドサイズを比率 + clamp で算出する。
   const scanGuideSize = clamp(shortEdge * SCAN_GUIDE_RATIO, SCAN_GUIDE_MIN, SCAN_GUIDE_MAX);
   const scannerCloseBottom = insets.bottom + px(20);
   // 日本語: QR 直後の触覚ガイド（参照デザイン：左右に余白、カード間は詰める）
-  const hapticsGuideCardWidth = Math.min(sx(310), width - sx(44));
-  const hapticsGuideScrollPadTop = logoTop + logoHeight + sx(10);
-  const hapticsGuideTitleFont = clamp(width * 0.058, sx(20), sx(26));
+  const hapticsGuideCardWidth = Math.min(sx(310), layoutWidth - sx(44));
+  const hapticsGuideScrollPadTop = heroLogoTop + logoHeight + sx(10);
+  const hapticsGuideTitleFont = clamp(layoutWidth * 0.058, sx(20), sx(26));
   const hapticsGuideTitleLine = hapticsGuideTitleFont * 1.15;
-  const hapticsGuideSubtitleFont = clamp(width * 0.038, sx(13), sx(15));
+  const hapticsGuideSubtitleFont = clamp(layoutWidth * 0.038, sx(13), sx(15));
   const hapticsGuideSubtitleLine = hapticsGuideSubtitleFont * 1.35;
   const hapticsGuideHeaderGapAfterLogo = sx(8);
   const hapticsGuideHeaderToCardsGap = sx(14);
@@ -725,29 +778,36 @@ export default function PairingTestScreen() {
             end={{ x: 0.5, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <Animated.View
-            style={[
-              styles.logo,
-              animatedStyles.logo,
-              {
-                left: (width - logoWidth) / 2,
-                top: logoTop,
-                width: logoWidth,
-                height: logoHeight,
-              },
-            ]}>
-            <Image source={LOGO_WHITE_IMAGE} style={styles.fill} contentFit="contain" />
-          </Animated.View>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.hapticsGuideScrollContent,
-              {
-                paddingTop: hapticsGuideScrollPadTop,
-                paddingBottom: insets.bottom + sx(20),
-              },
-            ]}
-            showsVerticalScrollIndicator={false}>
+          <View
+            style={{
+              flex: 1,
+              width: layoutWidth,
+              maxWidth: MAX_PAIRING_LAYOUT_WIDTH,
+              alignSelf: "center",
+            }}>
+            <Animated.View
+              style={[
+                styles.logo,
+                animatedStyles.logo,
+                {
+                  left: (layoutWidth - logoWidth) / 2,
+                  top: heroLogoTop,
+                  width: logoWidth,
+                  height: logoHeight,
+                },
+              ]}>
+              <Image source={LOGO_WHITE_IMAGE} style={styles.fill} contentFit="contain" />
+            </Animated.View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[
+                styles.hapticsGuideScrollContent,
+                {
+                  paddingTop: hapticsGuideScrollPadTop,
+                  paddingBottom: insets.bottom + sx(20),
+                },
+              ]}
+              showsVerticalScrollIndicator={false}>
             <View
               style={[
                 styles.hapticsGuideOuterSheet,
@@ -815,7 +875,8 @@ export default function PairingTestScreen() {
                 })}
               </View>
             </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
         <CharacterInfoModal
           visible={detailModalVisible}
@@ -834,67 +895,84 @@ export default function PairingTestScreen() {
             colors={["#34add5", "#e0e4c9"]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
-            style={[styles.measureScreenBackground, { paddingTop: measureContentTopPadding }]}>
-            <StatusBar style="light" />
-            <Image
-              source={LOGO_WHITE_IMAGE}
-              style={[
-                styles.measureTopLogo,
-                { top: measureLogoTop, width: measureLogoWidth, height: measureLogoHeight },
-              ]}
-              contentFit="contain"
-            />
+            style={[
+              styles.measureScreenBackground,
+              { paddingTop: measureContentTopPadding, width: "100%" },
+            ]}>
             <View
-              style={[
-                styles.registerCardOuter,
-                {
-                  width: registerCardSize,
-                  borderRadius: registerCardRadius,
-                  shadowRadius: sx(8.52),
-                },
-              ]}>
+              style={{
+                flex: 1,
+                width: layoutWidth,
+                maxWidth: MAX_PAIRING_LAYOUT_WIDTH,
+                alignSelf: "center",
+                alignItems: "center",
+              }}>
+              <StatusBar style="light" />
+              <Image
+                source={LOGO_WHITE_IMAGE}
+                style={[
+                  styles.measureTopLogo,
+                  {
+                    top: measureLogoTop,
+                    left: (layoutWidth - measureLogoWidth) / 2,
+                    width: measureLogoWidth,
+                    height: measureLogoHeight,
+                  },
+                ]}
+                contentFit="contain"
+              />
               <View
                 style={[
-                  styles.registerCardInner,
+                  styles.registerCardOuter,
                   {
                     width: registerCardSize,
-                    height: registerCardSize,
                     borderRadius: registerCardRadius,
+                    shadowRadius: sx(8.52),
                   },
                 ]}>
-                <Text
+                <View
                   style={[
-                    styles.registerPostureTitle,
+                    styles.registerCardInner,
                     {
-                      top: registerTitleTop,
-                      fontSize: registerTitleFont,
-                      lineHeight: registerTitleLine,
+                      width: registerCardSize,
+                      height: registerCardSize,
+                      borderRadius: registerCardRadius,
                     },
                   ]}>
-                  良い姿勢を登録中
-                </Text>
-                <Text
-                  style={[
-                    styles.registerPostureSubtitle,
-                    {
-                      top: registerSubtitleTop,
-                      fontSize: registerSubtitleFont,
-                      lineHeight: registerSubtitleLine,
-                    },
-                  ]}>
-                  PCで姿勢登録をしてください
-                </Text>
-                <Image
-                  source={GOOD_POSTURE_REGISTER_CHARACTER_IMAGE}
-                  style={{
-                    position: "absolute",
-                    left: registerAnagoLeft,
-                    top: registerAnagoTop,
-                    width: registerAnagoWidth,
-                    height: registerAnagoHeight,
-                  }}
-                  contentFit="contain"
-                />
+                  <Text
+                    style={[
+                      styles.registerPostureTitle,
+                      {
+                        top: registerTitleTop,
+                        fontSize: registerTitleFont,
+                        lineHeight: registerTitleLine,
+                      },
+                    ]}>
+                    良い姿勢を登録中
+                  </Text>
+                  <Text
+                    style={[
+                      styles.registerPostureSubtitle,
+                      {
+                        top: registerSubtitleTop,
+                        fontSize: registerSubtitleFont,
+                        lineHeight: registerSubtitleLine,
+                      },
+                    ]}>
+                    PCで姿勢登録をしてください
+                  </Text>
+                  <Image
+                    source={GOOD_POSTURE_REGISTER_CHARACTER_IMAGE}
+                    style={{
+                      position: "absolute",
+                      left: registerAnagoLeft,
+                      top: registerAnagoTop,
+                      width: registerAnagoWidth,
+                      height: registerAnagoHeight,
+                    }}
+                    contentFit="contain"
+                  />
+                </View>
               </View>
             </View>
           </LinearGradient>
@@ -916,90 +994,107 @@ export default function PairingTestScreen() {
             colors={["#34add5", "#e0e4c9"]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
-            style={[styles.measureScreenBackground, { paddingTop: measureContentTopPadding }]}>
-            <Image
-              source={LOGO_WHITE_IMAGE}
-              style={[
-                styles.measureTopLogo,
-                { top: measureLogoTop, width: measureLogoWidth, height: measureLogoHeight },
-              ]}
-              contentFit="contain"
-            />
+            style={[
+              styles.measureScreenBackground,
+              { paddingTop: measureContentTopPadding, width: "100%" },
+            ]}>
             <View
-              style={[
-                styles.measureCard,
-                {
-                  width: measureCardSize,
-                  height: measureCardSize,
-                  borderRadius: measureCardRadius,
-                },
-              ]}>
-              <Text
+              style={{
+                flex: 1,
+                width: layoutWidth,
+                maxWidth: MAX_PAIRING_LAYOUT_WIDTH,
+                alignSelf: "center",
+                alignItems: "center",
+              }}>
+              <Image
+                source={LOGO_WHITE_IMAGE}
                 style={[
-                  styles.measureTitle,
+                  styles.measureTopLogo,
                   {
-                    top: measureTitleTop,
-                    fontSize: measureTitleFont,
-                    lineHeight: measureTitleLine,
+                    top: measureLogoTop,
+                    left: (layoutWidth - measureLogoWidth) / 2,
+                    width: measureLogoWidth,
+                    height: measureLogoHeight,
                   },
-                ]}>
-                測定中
-              </Text>
+                ]}
+                contentFit="contain"
+              />
               <View
                 style={[
-                  styles.measureToggleRow,
+                  styles.measureCard,
                   {
-                    left: measureToggleLeft,
-                    top: measureToggleTop,
-                    width: measureToggleWidth,
-                    height: measureToggleHeight,
-                    borderRadius: measureToggleRadius,
-                    paddingHorizontal: measureTogglePadX,
+                    width: measureCardSize,
+                    height: measureCardSize,
+                    borderRadius: measureCardRadius,
                   },
                 ]}>
                 <Text
                   style={[
-                    styles.measureToggleLabel,
-                    { fontSize: measureToggleFont, lineHeight: measureToggleLine },
+                    styles.measureTitle,
+                    {
+                      top: measureTitleTop,
+                      fontSize: measureTitleFont,
+                      lineHeight: measureTitleLine,
+                    },
                   ]}>
-                  触覚
+                  測定中
                 </Text>
-                <View style={styles.measureSwitchWrap}>
-                  <Switch
-                    value={hapticEnabled}
-                    onValueChange={setHapticEnabled}
-                    trackColor={{ false: "#c8c8c8", true: "#13a2d7" }}
-                    thumbColor="#ffffff"
-                  />
+                <View
+                  style={[
+                    styles.measureToggleRow,
+                    {
+                      left: measureToggleLeft,
+                      top: measureToggleTop,
+                      width: measureToggleWidth,
+                      height: measureToggleHeight,
+                      borderRadius: measureToggleRadius,
+                      paddingHorizontal: measureTogglePadX,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.measureToggleLabel,
+                      { fontSize: measureToggleFont, lineHeight: measureToggleLine },
+                    ]}>
+                    触覚
+                  </Text>
+                  <View style={styles.measureSwitchWrap}>
+                    <Switch
+                      value={hapticEnabled}
+                      onValueChange={setHapticEnabled}
+                      trackColor={{ false: "#c8c8c8", true: "#13a2d7" }}
+                      thumbColor="#ffffff"
+                    />
+                  </View>
                 </View>
+                <Animated.View
+                  style={[
+                    styles.measureAnago,
+                    {
+                      left: measureAnagoLeft,
+                      top: measureAnagoTop,
+                      width: measureAnagoWidth,
+                      height: measureAnagoHeight,
+                    },
+                    shouldVibeAnimate && animatedStyles.measureAnagoVibe,
+                  ]}>
+                  {shouldVibeAnimate ? (
+                    <Fragment>
+                      <AnimatedImage
+                        source={ANAGO_IMAGE}
+                        style={[styles.measureAnagoGhost, animatedStyles.measureAnagoGhostFar]}
+                        contentFit="contain"
+                      />
+                      <AnimatedImage
+                        source={ANAGO_IMAGE}
+                        style={[styles.measureAnagoGhost, animatedStyles.measureAnagoGhostNear]}
+                        contentFit="contain"
+                      />
+                    </Fragment>
+                  ) : null}
+                  <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
+                </Animated.View>
               </View>
-              <Animated.View
-                style={[
-                  styles.measureAnago,
-                  {
-                    left: measureAnagoLeft,
-                    top: measureAnagoTop,
-                    width: measureAnagoWidth,
-                    height: measureAnagoHeight,
-                  },
-                  shouldVibeAnimate && animatedStyles.measureAnagoVibe,
-                ]}>
-                {shouldVibeAnimate ? (
-                  <Fragment>
-                    <AnimatedImage
-                      source={ANAGO_IMAGE}
-                      style={[styles.measureAnagoGhost, animatedStyles.measureAnagoGhostFar]}
-                      contentFit="contain"
-                    />
-                    <AnimatedImage
-                      source={ANAGO_IMAGE}
-                      style={[styles.measureAnagoGhost, animatedStyles.measureAnagoGhostNear]}
-                      contentFit="contain"
-                    />
-                  </Fragment>
-                ) : null}
-                <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
-              </Animated.View>
             </View>
           </LinearGradient>
         </View>
@@ -1015,6 +1110,13 @@ export default function PairingTestScreen() {
   return (
     <Fragment>
     <View style={styles.screen}>
+      <View
+        style={{
+          flex: 1,
+          width: layoutWidth,
+          maxWidth: MAX_PAIRING_LAYOUT_WIDTH,
+          alignSelf: "center",
+        }}>
       <ScrollView contentContainerStyle={[styles.content, { minHeight: contentMinHeight }]}>
         {/* 上部グラデーション帯（Figma Frame 43：高さ 346） */}
         <LinearGradient
@@ -1029,8 +1131,8 @@ export default function PairingTestScreen() {
               styles.logo,
               animatedStyles.logo,
               {
-                left: (width - logoWidth) / 2,
-                top: logoTop,
+                left: (layoutWidth - logoWidth) / 2,
+                top: heroLogoTop,
                 width: logoWidth,
                 height: logoHeight,
               },
@@ -1047,7 +1149,7 @@ export default function PairingTestScreen() {
               highlightQrForLink && styles.qrButtonEmphasized,
               {
                 left: qrLeft,
-                top: qrTop,
+                top: heroQrTop,
                 width: qrButtonWidth,
                 height: qrButtonHeight,
                 borderRadius: qrButtonRadius,
@@ -1071,10 +1173,10 @@ export default function PairingTestScreen() {
               styles.qrHint,
               {
                 left: qrLeft,
-                top: qrHintTop,
+                top: heroQrHintTop,
                 width: qrHintWidth,
-                fontSize: qrHintFont,
-                lineHeight: qrHintLine,
+                fontSize: heroQrHintFont,
+                lineHeight: heroQrHintLine,
               },
             ]}>
             PCに表示されているQRコードを{"\n"}読み取ってください
@@ -1085,7 +1187,12 @@ export default function PairingTestScreen() {
             style={[
               styles.heroAnago,
               animatedStyles.anago,
-              { right: anagoRight, top: anagoTop, width: anagoWidth, height: anagoHeight },
+              {
+                right: anagoRight,
+                top: heroAnagoTop,
+                width: anagoWidth,
+                height: anagoHeight,
+              },
             ]}>
             <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
           </Animated.View>
@@ -1311,6 +1418,7 @@ export default function PairingTestScreen() {
         </View>
 
       </ScrollView>
+      </View>
 
       {scannerVisible ? (
         <View style={styles.scannerOverlay}>
