@@ -125,7 +125,8 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
               width: labelBoxWidth,
               height: labelBoxHeight,
             },
-          ]}>
+          ]}
+          numberOfLines={1}>
           {paddedSlot}
         </Text>
       </View>

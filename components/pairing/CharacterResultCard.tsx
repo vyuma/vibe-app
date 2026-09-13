@@ -58,6 +58,12 @@ export type CharacterResultCardProps = {
    * モーダル内など親に flex 高さが無いとき ScrollView が潰れないよう最大高さを指定する。
    */
   scrollMaxHeight?: number;
+  /** 獲得フルスクリーンでは外側 ScrollView が全体を担当する。 */
+  detailScrollEnabled?: boolean;
+  /** Figma 390px 幅を 1 とした取得画面の等比スケール。 */
+  detailScale?: number;
+  /** 既存シートの外余白を使わず、Frame 51 をそのまま配置する。 */
+  detailFlush?: boolean;
   /** 未指定時は DEFAULT_DETAIL_PORTRAIT_TUNING（詳細レイアウト時のみ反映） */
   detailPortraitTune?: Partial<DetailPortraitTuning>;
 };
@@ -70,6 +76,9 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   payload,
   detailLayout = false,
   scrollMaxHeight,
+  detailScrollEnabled = true,
+  detailScale = 1,
+  detailFlush = false,
   detailPortraitTune,
 }: CharacterResultCardProps) {
   const { width: windowWidth } = useWindowDimensions();
@@ -80,11 +89,34 @@ export const CharacterResultCard = memo(function CharacterResultCard({
     if (detailCardInnerWidth > 0) {
       return detailCardInnerWidth;
     }
-    const maxFrame = Math.min(DETAIL_CARD_MAX_WIDTH, Math.min(windowWidth - 32, 408));
-    return Math.max(100, maxFrame - 48);
-  }, [detailCardInnerWidth, windowWidth]);
+    const maxFrame = Math.min(
+      DETAIL_CARD_MAX_WIDTH * detailScale,
+      Math.min(windowWidth - 32, 408 * detailScale),
+    );
+    return Math.max(100, maxFrame - 48 * detailScale);
+  }, [detailCardInnerWidth, detailScale, windowWidth]);
 
-  const detailPortraitSquareSide = Math.min(DETAIL_PORTRAIT_FRAME, detailInnerContentWidth);
+  const detailPortraitSquareSide = Math.min(
+    DETAIL_PORTRAIT_FRAME * detailScale,
+    detailInnerContentWidth,
+  );
+  const detailContentScale = Math.min(
+    detailScale,
+    detailInnerContentWidth / DETAIL_PORTRAIT_FRAME,
+  );
+  /** 狭い端末では 390px 基準の文字比率を保って縮小する。 */
+  const detailStatNumFont = useMemo(
+    () => 48 * detailContentScale,
+    [detailContentScale],
+  );
+  const detailPercentNumFont = useMemo(
+    () => 48 * detailContentScale,
+    [detailContentScale],
+  );
+  const detailPercentSymbolFont = useMemo(
+    () => 24 * detailContentScale,
+    [detailContentScale],
+  );
 
   const catalogColors = useMemo(
     () => getCatalogEntryByCharacterId(payload.characterId)?.characterColor,
@@ -146,14 +178,29 @@ export const CharacterResultCard = memo(function CharacterResultCard({
     return (
       <ScrollView
         style={scrollStyle}
-        contentContainerStyle={[styles.scrollContentDetail, styles.detailScrollContent]}
+        contentContainerStyle={[
+          styles.scrollContentDetail,
+          styles.detailScrollContent,
+          detailFlush && styles.detailScrollContentFlush,
+        ]}
         showsVerticalScrollIndicator={false}
-        nestedScrollEnabled>
+        nestedScrollEnabled
+        scrollEnabled={detailScrollEnabled}>
         <View
-          style={styles.detailFrame51}
+          style={[
+            styles.detailFrame51,
+            {
+              maxWidth: DETAIL_CARD_MAX_WIDTH * detailScale,
+              minHeight: DETAIL_CARD_MIN_HEIGHT * detailScale,
+              borderRadius: 32 * detailScale,
+              paddingHorizontal: 24 * detailScale,
+              paddingTop: 24 * detailScale,
+              paddingBottom: 24 * detailScale,
+            },
+          ]}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
-            setDetailCardInnerWidth(Math.max(0, w - 48));
+            setDetailCardInnerWidth(Math.max(0, w - 48 * detailScale));
           }}>
           <View
             style={[
@@ -161,6 +208,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
               {
                 width: detailPortraitSquareSide,
                 height: detailPortraitSquareSide,
+                borderRadius: 24 * detailContentScale,
                 backgroundColor: portraitBg,
               },
             ]}>
@@ -182,13 +230,44 @@ export const CharacterResultCard = memo(function CharacterResultCard({
             </View>
           </View>
 
-          <Text style={styles.detailCharacterName}>{payload.characterName}</Text>
+          <Text
+            style={[
+              styles.detailCharacterName,
+              {
+                marginTop: 16 * detailContentScale,
+                fontSize: 24 * detailContentScale,
+                lineHeight: 29 * detailContentScale,
+              },
+            ]}>
+            {payload.characterName}
+          </Text>
 
-          <View style={styles.detailTagsRow}>
+          <View
+            style={[
+              styles.detailTagsRow,
+              { gap: 8 * detailContentScale, marginTop: 16 * detailContentScale },
+            ]}>
             {tags.map((tag, index) => (
-              <View key={`${tag}-${index}`} style={[styles.detailTagPill, { backgroundColor: tagPillBg }]}>
+              <View
+                key={`${tag}-${index}`}
+                style={[
+                  styles.detailTagPill,
+                  {
+                    borderRadius: 100 * detailContentScale,
+                    paddingVertical: 8 * detailContentScale,
+                    paddingHorizontal: 8 * detailContentScale,
+                    backgroundColor: tagPillBg,
+                  },
+                ]}>
                 <Text
-                  style={[styles.detailTagText, { color: primary }]}
+                  style={[
+                    styles.detailTagText,
+                    {
+                      color: primary,
+                      fontSize: 10 * detailContentScale,
+                      lineHeight: 12 * detailContentScale,
+                    },
+                  ]}
                   numberOfLines={1}
                   ellipsizeMode="tail">
                   {tag}
@@ -197,36 +276,130 @@ export const CharacterResultCard = memo(function CharacterResultCard({
             ))}
           </View>
 
-          <View style={styles.detailStatRow}>
+          <View style={[styles.detailStatRow, { marginTop: 24 * detailContentScale }]}>
             <View style={styles.detailStatColLeft}>
-              <Text style={styles.detailStatLabel}>良い姿勢時間</Text>
-              <Text style={[styles.detailStatValueNum, { color: primary }]}>{formatDuration(goodMs)}</Text>
+              <Text
+                style={[
+                  styles.detailStatLabel,
+                  { fontSize: 10 * detailContentScale, lineHeight: 12 * detailContentScale },
+                ]}>
+                良い姿勢時間
+              </Text>
+              <Text
+                style={[
+                  styles.detailStatValueNum,
+                  {
+                    color: primary,
+                    marginTop: 4 * detailContentScale,
+                    fontSize: detailStatNumFont,
+                    lineHeight: detailStatNumFont * 1.15,
+                  },
+                ]}>
+                {formatDuration(goodMs)}
+              </Text>
             </View>
             <View style={styles.detailStatColRight}>
-              <Text style={[styles.detailStatLabel, styles.detailStatLabelRight]}>良い姿勢率</Text>
+              <Text
+                style={[
+                  styles.detailStatLabel,
+                  styles.detailStatLabelRight,
+                  { fontSize: 10 * detailContentScale, lineHeight: 12 * detailContentScale },
+                ]}>
+                良い姿勢率
+              </Text>
               <View style={styles.detailPercentRow}>
-                <Text style={[styles.detailStatValueNum, { color: primary }]}>{pctInt}</Text>
-                <Text style={[styles.detailPercentSymbol, { color: primary }]}>%</Text>
+                <Text
+                  style={[
+                    styles.detailStatValueNum,
+                    {
+                      color: primary,
+                      fontSize: detailPercentNumFont,
+                      lineHeight: detailPercentNumFont * 1.15,
+                    },
+                  ]}>
+                  {pctInt}
+                </Text>
+                <Text
+                  style={[
+                    styles.detailPercentSymbol,
+                    {
+                      color: primary,
+                      fontSize: detailPercentSymbolFont,
+                      lineHeight: detailPercentSymbolFont * 1.2,
+                      paddingBottom: detailPercentSymbolFont * 0.16,
+                    },
+                  ]}>
+                  %
+                </Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.detailDivider} />
+          <View
+            style={[
+              styles.detailDivider,
+              { marginTop: 28 * detailContentScale, height: detailContentScale },
+            ]}
+          />
 
-          <View style={styles.detailMetaBlock}>
+          <View
+            style={[
+              styles.detailMetaBlock,
+              { marginTop: 16 * detailContentScale, gap: 16 * detailContentScale },
+            ]}>
             <View style={styles.detailMetaRow}>
               <View style={styles.detailMetaLeft}>
-                <Ionicons name="calendar-outline" size={16} color={primary} style={styles.detailMetaIcon} />
-                <Text style={styles.detailMetaLabel}>獲得日</Text>
+                <Ionicons
+                  name="calendar-outline"
+                  size={16 * detailContentScale}
+                  color={primary}
+                  style={{ marginRight: 8 * detailContentScale }}
+                />
+                <Text
+                  style={[
+                    styles.detailMetaLabel,
+                    { fontSize: 10 * detailContentScale, lineHeight: 12 * detailContentScale },
+                  ]}>
+                  獲得日
+                </Text>
               </View>
-              <Text style={styles.detailMetaValue}>{formatAcquiredAt(payload.acquiredAt)}</Text>
+              <Text
+                style={[
+                  styles.detailMetaValue,
+                  {
+                    fontSize: 10 * detailContentScale,
+                    lineHeight: 12 * detailContentScale,
+                    marginLeft: 12 * detailContentScale,
+                  },
+                ]}>
+                {formatAcquiredAt(payload.acquiredAt)}
+              </Text>
             </View>
             <View style={styles.detailMetaRow}>
               <View style={styles.detailMetaLeft}>
-                <Ionicons name="time-outline" size={16} color={primary} style={styles.detailMetaIcon} />
-                <Text style={styles.detailMetaLabel}>測定時間</Text>
+                <Ionicons
+                  name="time-outline"
+                  size={16 * detailContentScale}
+                  color={primary}
+                  style={{ marginRight: 8 * detailContentScale }}
+                />
+                <Text
+                  style={[
+                    styles.detailMetaLabel,
+                    { fontSize: 10 * detailContentScale, lineHeight: 12 * detailContentScale },
+                  ]}>
+                  測定時間
+                </Text>
               </View>
-              <Text style={styles.detailMetaValue}>
+              <Text
+                style={[
+                  styles.detailMetaValue,
+                  {
+                    fontSize: 10 * detailContentScale,
+                    lineHeight: 12 * detailContentScale,
+                    marginLeft: 12 * detailContentScale,
+                  },
+                ]}>
                 {formatOptionalDuration(payload.activeMeasurementMs)}
               </Text>
             </View>
@@ -347,6 +520,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingHorizontal: 8,
   },
+  detailScrollContentFlush: {
+    paddingTop: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+  },
   /** Figma Frame 51（獲得カード本体） */
   detailFrame51: {
     width: "100%",
@@ -394,11 +572,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   detailTagPill: {
-    flex: 1,
-    minWidth: 0,
+    flexShrink: 1,
     borderRadius: 100,
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -406,7 +583,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 12,
     fontWeight: "700",
-    width: "100%",
     textAlign: "center",
   },
   detailStatRow: {
