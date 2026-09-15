@@ -34,7 +34,6 @@ export type CollectionSlotCardProps = {
   labelFontSize: number;
   labelLineHeight: number;
   labelBoxWidth: number;
-  labelBoxHeight: number;
   lockedCardStyle: object;
   acquiredCardStyle: object;
   lockedLabelStyle: object;
@@ -59,7 +58,6 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
   labelFontSize,
   labelLineHeight,
   labelBoxWidth,
-  labelBoxHeight,
   lockedCardStyle,
   acquiredCardStyle,
   lockedLabelStyle,
@@ -123,9 +121,12 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
               fontSize: labelFontSize,
               lineHeight: labelLineHeight,
               width: labelBoxWidth,
-              height: labelBoxHeight,
             },
           ]}
+          // スロット番号はカードと同じ倍率で描画する。OS の文字拡大で
+          // 固定サイズのカードから欠けないよう、本文とは別に扱う。
+          allowFontScaling={false}
+          adjustsFontSizeToFit
           numberOfLines={1}>
           {paddedSlot}
         </Text>
@@ -213,6 +214,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   slotNumberBase: {
+    includeFontPadding: false,
     textAlign: "center",
     textAlignVertical: "center",
   },
