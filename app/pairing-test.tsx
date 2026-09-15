@@ -208,11 +208,11 @@ export default function PairingTestScreen() {
     (layoutWidth - collectionPaddingHorizontal * 2 - collectionGap) / 2;
   const collectionCardHeight = collectionCardWidth * (199 / 152.72);
   const collectionCardRadius = clamp(collectionCardWidth * 0.125, sx(14), sx(24));
-  const collectionCardLabelFont = clamp(collectionCardWidth * 0.18, sx(22), sx(32));
-  const collectionCardLabelLine = collectionCardLabelFont * 1.2;
+  // Figma 580:8066: SF Pro Bold 27.767px / 33.14px（390px 幅）。
+  const collectionCardLabelFont = sx(27.767);
+  const collectionCardLabelLine = sx(33.14);
   // Web/Android の数字幅差で 001 が折り返されないようカード幅内で中央寄せする。
   const collectionCardLabelBoxWidth = collectionCardWidth;
-  const collectionCardLabelBoxHeight = collectionCardHeight * (33 / 199);
   const collectionGridMarginTop = 0;
   const collectionMoreMarginTop = clamp(height * 0.018, sx(10), sx(16));
   const collectionMorePadX = clamp(layoutWidth * 0.041, sx(12), sx(18));
@@ -1206,7 +1206,6 @@ export default function PairingTestScreen() {
                   labelFontSize={collectionCardLabelFont}
                   labelLineHeight={collectionCardLabelLine}
                   labelBoxWidth={collectionCardLabelBoxWidth}
-                  labelBoxHeight={collectionCardLabelBoxHeight}
                   lockedCardStyle={[styles.collectionCard, styles.collectionCardLocked]}
                   acquiredCardStyle={[styles.collectionCard, styles.collectionCardAcquired]}
                   lockedLabelStyle={styles.collectionCardLabelLocked}
