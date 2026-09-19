@@ -196,7 +196,8 @@ export default function PairingTestScreen() {
   const heroQrHintLine = sx(24);
   const anagoWidth = sx(147);
   const anagoHeight = sx(236);
-  const heroAnagoTop = sx(125);
+  // Frame 43 の下端を基準にして、胴体をコレクションの背面まで伸ばす。
+  const heroAnagoBottom = sx(17);
   const anagoRight = sx(17);
   const contentMinHeight = Math.max(height - insets.top, sx(DESIGN_HEIGHT));
   const collectionPaddingHorizontal = sx(33);
@@ -204,7 +205,7 @@ export default function PairingTestScreen() {
   const collectionPaddingBottom = sx(40);
   // Frame 42: y=329。Frame 43 の高さ 378 に 49px 重なる。
   const collectionMarginTop = -sx(49);
-  const collectionRadius = sx(28);
+  const collectionRadius = sx(32);
   const collectionHeaderBottom = sx(8);
   const collectionLabelFont = sx(16);
   const collectionLabelLine = sx(19);
@@ -1040,7 +1041,7 @@ export default function PairingTestScreen() {
           alignSelf: "center",
         }}>
       <ScrollView contentContainerStyle={[styles.content, { minHeight: contentMinHeight }]}>
-        {/* 上部グラデーション帯（Figma Frame 43：高さ 346） */}
+        {/* 上部グラデーション帯（Figma Frame 43：高さ 378） */}
         <LinearGradient
           colors={["#34add5", "#e0e4c9"]}
           start={{ x: 0.5, y: 0 }}
@@ -1103,14 +1104,14 @@ export default function PairingTestScreen() {
             PCに表示されているQRコードを{"\n"}読み取ってください
           </Text>
 
-          {/* 右側のアナゴ（Figma Frame 30：x=258 / 74×482） */}
+          {/* 右側のアナゴ（Figma 580:8059：x=226 / y=125 / 147×236） */}
           <Animated.View
             style={[
               styles.heroAnago,
               animatedStyles.anago,
               {
                 right: anagoRight,
-                top: heroAnagoTop,
+                bottom: heroAnagoBottom,
                 width: anagoWidth,
                 height: anagoHeight,
               },
@@ -1119,15 +1120,7 @@ export default function PairingTestScreen() {
           </Animated.View>
         </LinearGradient>
 
-        {completedResult && (
-          <View style={{ padding: 16, backgroundColor: "#ffffff" }} accessibilityLiveRegion="polite">
-            <Text style={{ fontWeight: "700" }}>前回の測定は終了しました</Text>
-            <Text>測定時間 {Math.round(completedResult.activeMeasurementMs / 1000)}秒・良い姿勢 {Math.round(completedResult.goodRatio * 100)}%</Text>
-            <Text>{completedResult.character ? `${completedResult.character.characterName}を獲得しました` : "今回のキャラクター獲得はありません"}</Text>
-          </View>
-        )}
-
-        {/* コレクションシート（Figma Frame 42：bg #FDFDFD / y=291） */}
+        {/* コレクションシート（Figma Frame 42：bg #FDFDFD / y=329） */}
         <View
           style={[
             styles.collectionSheet,
@@ -1138,6 +1131,7 @@ export default function PairingTestScreen() {
               marginTop: collectionMarginTop,
               borderTopLeftRadius: collectionRadius,
               borderTopRightRadius: collectionRadius,
+              boxShadow: `0px 0px ${sx(8.52)}px rgba(0, 0, 0, 0.15)`,
             },
           ]}>
           {/* ヘッダー：コレクション 0 / 111 */}
@@ -1253,6 +1247,15 @@ export default function PairingTestScreen() {
               </Text>
             </Pressable>
           ) : null}
+
+          {/* 終了案内でヒーローとシートの重なりを分断しない。 */}
+          {completedResult && (
+            <View style={{ marginTop: sx(16), gap: sx(4) }} accessibilityLiveRegion="polite">
+              <Text style={{ fontWeight: "700" }}>前回の測定は終了しました</Text>
+              <Text>測定時間 {Math.round(completedResult.activeMeasurementMs / 1000)}秒・良い姿勢 {Math.round(completedResult.goodRatio * 100)}%</Text>
+              <Text>{completedResult.character ? `${completedResult.character.characterName}を獲得しました` : "今回のキャラクター獲得はありません"}</Text>
+            </View>
+          )}
 
           {localError ? (
             <Text style={[styles.errorText, { marginTop: errorMarginTop, fontSize: errorFont }]}>
@@ -1396,10 +1399,6 @@ const styles = StyleSheet.create({
   // ソース PNG のアスペクト比に合わせて height を調整）。
   heroAnago: {
     position: "absolute",
-    right: px(-8),
-    top: px(135),
-    width: px(112),
-    height: px(176),
   },
 
   // コレクションシート（Frame 42）。marginTop は JSX 側の collectionMarginTop が優先（ここに書いても反映されない）。
@@ -1409,8 +1408,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: px(33),
     paddingTop: px(33),
     paddingBottom: px(40),
-    borderTopLeftRadius: px(28),
-    borderTopRightRadius: px(28),
+    borderTopLeftRadius: px(32),
+    borderTopRightRadius: px(32),
   },
   collectionHeader: {
     flexDirection: "row",
