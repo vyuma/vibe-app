@@ -40,7 +40,7 @@ export type CharacterInfoModalProps = {
 };
 
 /**
- * Figma mobile「カード詳細」シート。
+ * ホームの保存済みカードを、一覧を背面に残して表示する。
  */
 export function CharacterInfoModal({ visible, payload, onClose }: CharacterInfoModalProps) {
   const insets = useSafeAreaInsets();
@@ -84,8 +84,8 @@ export function CharacterInfoModal({ visible, payload, onClose }: CharacterInfoM
     return null;
   }
 
-  const sheetMaxHeight = height * 0.88;
-  const cardScrollMaxHeight = Math.max(160, sheetMaxHeight - headerHeight);
+  const sheetMaxHeight = Math.min(height * 0.88, height - insets.top - insets.bottom - 20);
+  const cardScrollMaxHeight = Math.max(0, sheetMaxHeight - headerHeight);
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -112,15 +112,16 @@ export function CharacterInfoModal({ visible, payload, onClose }: CharacterInfoM
                   hitSlop={8}
                   style={({ pressed }) => [styles.shareFab, pressed && styles.shareFabPressed]}>
                   <Image
-                    source={require("@/assets/images/share.png")}
+                    source={require("@/assets/images/acquisition-share.svg")}
                     style={styles.shareFabIcon}
                     contentFit="contain"
                   />
                 </Pressable>
                 <Pressable
                   onPress={onClose}
-                  hitSlop={10}
-                  style={({ pressed }) => pressed && styles.closePressed}>
+                  accessibilityRole="button"
+                  accessibilityLabel="閉じる"
+                  style={({ pressed }) => [styles.closeButton, pressed && styles.closePressed]}>
                   <Text style={styles.closeText}>閉じる</Text>
                 </Pressable>
               </View>
@@ -164,6 +165,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   header: {
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -190,14 +192,20 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   shareFabIcon: {
-    width: px(20),
-    height: px(20),
+    width: px(40),
+    height: px(40),
   },
   title: {
     fontSize: px(17),
     fontWeight: "700",
     color: "#000000",
     letterSpacing: px(0.2),
+  },
+  closeButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   closeText: {
     fontSize: px(15),
@@ -208,6 +216,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   body: {
+    flexShrink: 1,
+    minHeight: 0,
     width: "100%",
     backgroundColor: "#EDF1F6",
   },
