@@ -890,6 +890,8 @@ export default function PairingTestScreen() {
                     良い姿勢を登録中
                   </Text>
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureSubtitle,
                       {
@@ -990,6 +992,8 @@ export default function PairingTestScreen() {
                   姿勢測定中
                 </Text>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.registerPostureSubtitle,
                     {
