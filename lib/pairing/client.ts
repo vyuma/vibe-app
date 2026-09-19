@@ -26,7 +26,7 @@ export async function pairDevice(
   pairingInfo: PairingInfo,
   deviceName: string,
 ): Promise<PairResponse> {
-  const response = await fetch(buildPairEndpoint(pairingInfo, deviceName));
+  const response = await phoneRequest(buildPairEndpoint(pairingInfo, deviceName), pairingInfo, deviceName);
 
   if (!response.ok) {
     const payload = await parseJsonResponse<ErrorResponse | null>(response).catch(
@@ -45,7 +45,7 @@ export function connectPairingSocket(pairingInfo: PairingInfo): WebSocket {
 export async function disconnectDevice(
   pairingInfo: PairingInfo,
 ): Promise<DisconnectResponse> {
-  const response = await fetch(buildDisconnectEndpoint(pairingInfo));
+  const response = await phoneRequest(buildDisconnectEndpoint(pairingInfo), pairingInfo);
 
   if (!response.ok) {
     const payload = await parseJsonResponse<ErrorResponse | null>(response).catch(
@@ -55,4 +55,19 @@ export async function disconnectDevice(
   }
 
   return parseJsonResponse<DisconnectResponse>(response);
+}
+
+async function phoneRequest(endpoint: string, info: PairingInfo, deviceName?: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    return await fetch(endpoint, {
+      signal: controller.signal,
+      ...(info.roomId ? {
+        method: "POST", credentials: "omit" as const,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: info.roomId, token: info.token, deviceName }),
+      } : {}),
+    });
+  } finally { clearTimeout(timeout); }
 }

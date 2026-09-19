@@ -61,6 +61,8 @@ export function usePairingSession() {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchdogTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastMessageAtRef = useRef(0);
 
   useEffect(() => {
     pairingInfoRef.current = state.pairingInfo;
@@ -88,6 +90,8 @@ export function usePairingSession() {
     pairingInfo: PairingInfo,
     deviceName = DEFAULT_DEVICE_NAME,
   ): Promise<boolean> {
+    stopSocket();
+    pairingInfoRef.current = pairingInfo;
     setState((prev) => ({
       ...prev,
       pairingInfo,
@@ -138,13 +142,15 @@ export function usePairingSession() {
     }
 
     setState((prev) => {
-      if (!prev.isSocketConnected) {
+      if (!prev.isSocketConnected && !prev.measuringSessionActive && !prev.goodPostureRegistrationActive) {
         return prev;
       }
 
       return {
         ...prev,
         isSocketConnected: false,
+        measuringSessionActive: false,
+        goodPostureRegistrationActive: false,
       };
     });
   }
@@ -182,7 +188,9 @@ export function usePairingSession() {
     socketRef.current = socket;
 
     socket.onopen = () => {
+      if (socketRef.current !== socket) return;
       reconnectAttemptRef.current = 0;
+      lastMessageAtRef.current = Date.now();
       startHeartbeat();
       setState((prev) => ({
         ...prev,
@@ -192,6 +200,8 @@ export function usePairingSession() {
     };
 
     socket.onmessage = (message) => {
+      if (socketRef.current !== socket) return;
+      lastMessageAtRef.current = Date.now();
       try {
         const parsed = JSON.parse(String(message.data)) as PairingSocketEvent;
         if (
@@ -252,15 +262,20 @@ export function usePairingSession() {
     };
 
     socket.onerror = () => {
+      if (socketRef.current !== socket) return;
       setState((prev) => ({
         ...prev,
         error: "WebSocket接続でエラーが発生しました",
       }));
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      if (socketRef.current !== socket) return;
       clearHeartbeatTimer();
       socketRef.current = null;
+
+      const needsPairing = event.code === 4001 || event.code === 1008;
+      if (needsPairing) shouldKeepSocketRef.current = false;
 
       setState((prev) => ({
         ...prev,
@@ -268,6 +283,11 @@ export function usePairingSession() {
         // 日本語: 切断中は測定 UI を残さない（古い measuring_started のままホームに戻れない問題を防ぐ）
         measuringSessionActive: false,
         goodPostureRegistrationActive: false,
+        ...(needsPairing ? {
+          pairResponse: null,
+          lastSocketEvent: null,
+          error: "接続の有効期限が切れたか、切断されました。PCのQRから再接続してください。",
+        } : {}),
       }));
 
       if (shouldKeepSocketRef.current) {
@@ -342,6 +362,16 @@ export function usePairingSession() {
 
   function startHeartbeat() {
     clearHeartbeatTimer();
+    if (pairingInfoRef.current?.roomId) {
+      // A lost mobile network can leave WebSocket.OPEN unchanged. Stop stale alerts locally.
+      watchdogTimerRef.current = setInterval(() => {
+        if (Date.now() - lastMessageAtRef.current <= 40_000) return;
+        stopSocket();
+        shouldKeepSocketRef.current = true;
+        setState((prev) => ({ ...prev, error: "通信が途切れました。再接続しています。" }));
+        scheduleReconnect();
+      }, 5000);
+    }
     heartbeatTimerRef.current = setInterval(() => {
       const socket = socketRef.current;
       if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -353,6 +383,10 @@ export function usePairingSession() {
   }
 
   function clearHeartbeatTimer() {
+    if (watchdogTimerRef.current) {
+      clearInterval(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
     if (!heartbeatTimerRef.current) {
       return;
     }

@@ -1,154 +1,87 @@
 import type { PairingInfo } from "./types";
 
 export type PairingLinkParseResult =
-  | {
-      ok: true;
-      pairingInfo: PairingInfo;
-    }
-  | {
-      ok: false;
-      reason: string;
-    };
+  | { ok: true; pairingInfo: PairingInfo }
+  | { ok: false; reason: string };
 
 export function parsePairingLink(rawLink: string): PairingLinkParseResult {
-  const trimmed = rawLink.trim();
-
-  if (!trimmed) {
-    return { ok: false, reason: "リンクが空です。" };
-  }
-
+  if (!rawLink.trim()) return { ok: false, reason: "リンクが空です。" };
   try {
-    const url = new URL(trimmed);
+    const url = new URL(rawLink.trim());
+    const token = url.searchParams.get("token");
+    if (!token) throw new Error("token が含まれていません。");
 
-    if (url.protocol === "vibeapp:") {
+    // The public QR opens Vibe, while relay points to Posture's HTTPS API.
+    const relay = url.searchParams.get("relay");
+    if (relay) {
+      if (!["https:", "http:", "vibeapp:"].includes(url.protocol)) throw new Error("サポートされていないURL形式です。");
+      const endpoint = new URL(relay);
+      const room = url.searchParams.get("room");
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname);
+      if ((endpoint.protocol !== "https:" && !(local && endpoint.protocol === "http:"))
+        || endpoint.pathname !== "/api/pairing" || endpoint.search || endpoint.hash
+        || endpoint.username || endpoint.password) {
+        throw new Error("中継サーバーのURLが正しくありません。");
+      }
+      if (!room || !/^[a-f0-9]{32}$/.test(room) || !/^[a-f0-9]{64}$/.test(token)) {
+        throw new Error("接続情報が無効です。PCのQRを読み直してください。");
+      }
+      const httpProtocol = endpoint.protocol === "https:" ? "https" : "http";
+      return { ok: true, pairingInfo: {
+        host: endpoint.hostname, port: Number(endpoint.port || (httpProtocol === "https" ? 443 : 80)),
+        token, roomId: room, apiBasePath: "/api/pairing", httpProtocol,
+        wsProtocol: httpProtocol === "https" ? "wss" : "ws",
+      } };
+    }
+
+    if (url.protocol === "vibeapp:" || ((url.protocol === "http:" || url.protocol === "https:") && url.searchParams.has("host"))) {
       const host = url.searchParams.get("host");
-      const port = url.searchParams.get("port");
-      const token = url.searchParams.get("token");
-      const httpProtocolParam =
-        url.searchParams.get("httpProtocol") ?? url.searchParams.get("protocol");
-      const wsProtocolParam = url.searchParams.get("wsProtocol");
-
-      if (!host || !port || !token) {
-        return { ok: false, reason: "ペアリングURLの必須パラメータが不足しています。" };
+      const port = Number(url.searchParams.get("port"));
+      if (!host || !validPort(port) || new URL(`http://${host}`).host !== host) {
+        throw new Error("ペアリングURLのhostまたはportが正しくありません。");
       }
-
-      const parsedPort = Number.parseInt(port, 10);
-
-      if (Number.isNaN(parsedPort)) {
-        return { ok: false, reason: "port の形式が不正です。" };
-      }
-
-      const httpProtocol = parseHttpProtocol(httpProtocolParam);
-      if (!httpProtocol) {
-        return {
-          ok: false,
-          reason: "httpProtocol は http または https を指定してください。",
-        };
-      }
-
-      const wsProtocol = parseWsProtocol(wsProtocolParam) ?? inferWsProtocol(httpProtocol);
-      if (wsProtocolParam && !parseWsProtocol(wsProtocolParam)) {
-        return {
-          ok: false,
-          reason: "wsProtocol は ws または wss を指定してください。",
-        };
-      }
-
-      return {
-        ok: true,
-        pairingInfo: {
-          host,
-          port: parsedPort,
-          token,
-          httpProtocol,
-          wsProtocol,
-        },
-      };
+      const httpProtocol = url.searchParams.get("httpProtocol") ?? url.searchParams.get("protocol") ?? "http";
+      const wsProtocol = url.searchParams.get("wsProtocol") ?? (httpProtocol === "https" ? "wss" : "ws");
+      if (httpProtocol !== "http" && httpProtocol !== "https") throw new Error("httpProtocol は http または https を指定してください。");
+      if (wsProtocol !== "ws" && wsProtocol !== "wss") throw new Error("wsProtocol は ws または wss を指定してください。");
+      return { ok: true, pairingInfo: { host, port, token, httpProtocol, wsProtocol } };
     }
 
     if (url.protocol === "http:" || url.protocol === "https:") {
-      const token = url.searchParams.get("token");
-      const port =
-        url.port === "" ? (url.protocol === "https:" ? 443 : 80) : Number.parseInt(url.port, 10);
-
-      if (!token) {
-        return { ok: false, reason: "token が含まれていません。" };
-      }
-
-      if (Number.isNaN(port)) {
-        return { ok: false, reason: "port の形式が不正です。" };
-      }
-
-      return {
-        ok: true,
-        pairingInfo: {
-          host: url.hostname,
-          port,
-          token,
-          httpProtocol: url.protocol === "https:" ? "https" : "http",
-          wsProtocol: url.protocol === "https:" ? "wss" : "ws",
-        },
-      };
+      if (url.username || url.password) throw new Error("接続リンクが正しくありません。");
+      const httpProtocol = url.protocol === "https:" ? "https" : "http";
+      return { ok: true, pairingInfo: {
+        host: url.hostname, port: Number(url.port || (httpProtocol === "https" ? 443 : 80)),
+        token, httpProtocol, wsProtocol: httpProtocol === "https" ? "wss" : "ws",
+      } };
     }
-
-    return { ok: false, reason: "サポートされていないURL形式です。" };
-  } catch {
-    return { ok: false, reason: "URLを解析できませんでした。" };
+    throw new Error("サポートされていないURL形式です。");
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : "URLを解析できませんでした。" };
   }
 }
 
-export function buildPairEndpoint(
-  pairingInfo: PairingInfo,
-  deviceName: string,
-): string {
-  const params = new URLSearchParams({
-    token: pairingInfo.token,
-    deviceName,
-  });
+function validPort(port: number) { return Number.isInteger(port) && port > 0 && port <= 65535; }
 
-  return `${pairingInfo.httpProtocol}://${pairingInfo.host}:${pairingInfo.port}/pair?${params.toString()}`;
+export function buildPairEndpoint(info: PairingInfo, deviceName: string): string {
+  const url = httpEndpoint(info, "pair");
+  if (!info.roomId) url.search = new URLSearchParams({ token: info.token, deviceName }).toString();
+  return url.toString();
 }
 
-export function buildDisconnectEndpoint(pairingInfo: PairingInfo): string {
-  const params = new URLSearchParams({
-    token: pairingInfo.token,
-  });
-
-  return `${pairingInfo.httpProtocol}://${pairingInfo.host}:${pairingInfo.port}/disconnect?${params.toString()}`;
+export function buildDisconnectEndpoint(info: PairingInfo): string {
+  const url = httpEndpoint(info, "disconnect");
+  if (!info.roomId) url.search = new URLSearchParams({ token: info.token }).toString();
+  return url.toString();
 }
 
-export function buildWebSocketEndpoint(pairingInfo: PairingInfo): string {
-  const params = new URLSearchParams({
-    token: pairingInfo.token,
-  });
-
-  return `${pairingInfo.wsProtocol}://${pairingInfo.host}:${pairingInfo.port}/ws?${params.toString()}`;
+export function buildWebSocketEndpoint(info: PairingInfo): string {
+  const url = new URL(`${info.wsProtocol}://${info.host}:${info.port}${info.apiBasePath ?? ""}/ws`);
+  url.searchParams.set("token", info.token);
+  if (info.roomId) url.searchParams.set("room", info.roomId);
+  return url.toString();
 }
 
-function parseHttpProtocol(rawProtocol: string | null): "http" | "https" | null {
-  if (!rawProtocol) {
-    return "http";
-  }
-
-  if (rawProtocol === "http" || rawProtocol === "https") {
-    return rawProtocol;
-  }
-
-  return null;
-}
-
-function parseWsProtocol(rawProtocol: string | null): "ws" | "wss" | null {
-  if (!rawProtocol) {
-    return null;
-  }
-
-  if (rawProtocol === "ws" || rawProtocol === "wss") {
-    return rawProtocol;
-  }
-
-  return null;
-}
-
-function inferWsProtocol(httpProtocol: "http" | "https"): "ws" | "wss" {
-  return httpProtocol === "https" ? "wss" : "ws";
+function httpEndpoint(info: PairingInfo, action: string) {
+  return new URL(`${info.httpProtocol}://${info.host}:${info.port}${info.apiBasePath ?? ""}/${action}`);
 }

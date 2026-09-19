@@ -1,4 +1,18 @@
-# Welcome to your Expo app 👋
+# Vibe
+
+## Web版をVercelへ公開する
+
+このリポジトリをVercelにインポートすると、`vercel.json`に従って`npm ci` → `npm run build:web`が実行され、`dist`が公開されます。Expoの静的出力を使うため、全ページを`/`へrewriteする設定は不要です。
+
+公開URLをPosture側の環境変数`VIBE_PUBLIC_URL`に設定してください。Vibe側にRedisの認証情報や固定のPosture URLは不要です。PostureのQRに含まれる`relay`・`room`・`token`で接続先を受け取ります。
+
+PCのQRをiPhoneのカメラで開き、「通知を有効にして接続」を押してください。iPhoneのブラウザでは音と画面で通知します。測定中はページを開いたままにしてください。ネイティブ版のLAN接続・振動機能も引き続き利用できます。
+
+Webビルド: `npm run build:web`。URL解析・通信形式のテスト: `bun run test:pairing`。
+
+Posture側の設定とRedisの準備は、`posture-app/docs/browser-deployment.md`に記載しています。
+
+## Expoの開発環境
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 

@@ -7,7 +7,6 @@ import {
 } from "expo-camera";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -26,11 +25,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AcquisitionResultModal } from "@/components/pairing/AcquisitionResultModal";
 import { CollectionSlotCard } from "@/components/pairing/CollectionSlotCard";
+import { WebPairingPanel } from "@/components/pairing/WebPairingPanel";
 import { usePairingSession } from "@/hooks/usePairingSession";
 import { getCatalogEntryAtSlotIndex } from "@/lib/characterCatalog";
 import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
 import { parsePairingLink } from "@/lib/pairing";
 import type { AcquiredCharacterPayload, PairingInfo } from "@/lib/pairing/types";
+import { enableWebPostureAlerts, startWebPostureAlert } from "@/lib/web-posture-alert";
 
 // アセット：posture-app の PNG をそのまま流用する。
 const LOGO_WHITE_IMAGE = require("../assets/images/logo_white.png");
@@ -119,6 +120,7 @@ export default function PairingTestScreen() {
   const [postQrHapticsGuideVisible, setPostQrHapticsGuideVisible] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [isBadPosture, setIsBadPosture] = useState(false);
+  const [webAlertsEnabled, setWebAlertsEnabled] = useState(false);
   const hapticEnabled = true;
   const [acquiredCards, setAcquiredCards] = useState<AcquiredCharacterPayload[]>([]);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -353,6 +355,8 @@ export default function PairingTestScreen() {
 
   // 日本語: 前回 QR で保存した PairingInfo を復元し、再スキャンなしで pair + WS を再試行する
   useEffect(() => {
+    // Web connects from an explicit button press, which also unlocks browser audio.
+    if (Platform.OS === "web") return;
     let cancelled = false;
 
     async function restoreLastPairingSession() {
@@ -394,14 +398,6 @@ export default function PairingTestScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (pairResponse && !isSocketConnected && !isPairing) {
-        startSocket();
-      }
-    }, [pairResponse, isSocketConnected, isPairing, startSocket]),
-  );
-
   useEffect(() => {
     if (!hasHydratedAcquiredCards.current) {
       return;
@@ -423,6 +419,9 @@ export default function PairingTestScreen() {
   }, [scannerVisible]);
 
   useEffect(() => {
+    if (typeof lastSocketEvent?.isBad === "boolean") {
+      setIsBadPosture(lastSocketEvent.isBad);
+    }
     if (lastSocketEvent?.type === "posture_bad") {
       setIsBadPosture(true);
       return;
@@ -497,7 +496,7 @@ export default function PairingTestScreen() {
   }, [lastAcquiredDispatch]);
 
   useEffect(() => {
-    if (!isSocketConnected || !isBadPosture || !hapticEnabled) {
+    if (!isMeasuring || !isSocketConnected || !isBadPosture || !hapticEnabled) {
       if (Platform.OS !== "web") {
         Vibration.cancel();
       }
@@ -505,7 +504,7 @@ export default function PairingTestScreen() {
     }
 
     if (Platform.OS === "web") {
-      return;
+      return webAlertsEnabled ? startWebPostureAlert() : undefined;
     }
 
     // expo-haptics は使わず Vibration API のみ（Android はパターン、iOS は単発を繰り返し）。
@@ -524,10 +523,11 @@ export default function PairingTestScreen() {
       clearInterval(intervalId);
       Vibration.cancel();
     };
-  }, [hapticEnabled, isBadPosture, isSocketConnected]);
+  }, [hapticEnabled, isBadPosture, isMeasuring, isSocketConnected, webAlertsEnabled]);
 
   useEffect(() => {
-    if (!isSocketConnected || !isBadPosture || !hapticEnabled) {
+    if (Platform.OS === "web") return;
+    if (!isMeasuring || !isSocketConnected || !isBadPosture || !hapticEnabled) {
       const orphan = vibeLoopSoundRef.current;
       vibeLoopSoundRef.current = null;
       if (orphan) {
@@ -567,7 +567,7 @@ export default function PairingTestScreen() {
         void s.stopAsync().then(() => s.unloadAsync()).catch(() => {});
       }
     };
-  }, [hapticEnabled, isBadPosture, isSocketConnected]);
+  }, [hapticEnabled, isBadPosture, isMeasuring, isSocketConnected]);
 
   useEffect(() => {
     const runningAnimations: Animated.CompositeAnimation[] = [];
@@ -1064,8 +1064,10 @@ export default function PairingTestScreen() {
           <Pressable
             disabled={isPairing}
             onPress={() => void handleOpenScanner()}
+            accessibilityElementsHidden={Platform.OS === "web"}
             style={({ pressed }) => [
               styles.qrButton,
+              Platform.OS === "web" && { display: "none" },
               {
                 left: qrLeft,
                 top: heroQrTop,
@@ -1098,7 +1100,7 @@ export default function PairingTestScreen() {
                 lineHeight: heroQrHintLine,
               },
             ]}>
-            PCに表示されているQRコードを{"\n"}読み取ってください
+            {Platform.OS === "web" ? "下の接続ボタンから\nPCと接続してください" : "PCに表示されているQRコードを\n読み取ってください"}
           </Text>
 
           {/* 右側のアナゴ（Figma Frame 30：x=258 / 74×482） */}
@@ -1131,6 +1133,19 @@ export default function PairingTestScreen() {
             },
           ]}>
           {/* ヘッダー：コレクション 0 / 111 */}
+          {Platform.OS === "web" && (
+            <WebPairingPanel
+              isPairing={isPairing}
+              connected={isSocketConnected}
+              error={localError ?? error}
+              onConnect={handleConnectFromLink}
+              onDisconnect={disconnect}
+              onEnableAlerts={async () => {
+                await enableWebPostureAlerts();
+                setWebAlertsEnabled(true);
+              }}
+            />
+          )}
           <View style={[styles.collectionHeader, { marginBottom: collectionHeaderBottom }]}>
             <Text
               style={[

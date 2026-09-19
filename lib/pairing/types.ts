@@ -4,6 +4,9 @@ export type PairingInfo = {
   token: string;
   httpProtocol: "http" | "https";
   wsProtocol: "ws" | "wss";
+  /** Public relay only; absent for the native/LAN protocol. */
+  roomId?: string;
+  apiBasePath?: "/api/pairing";
 };
 
 export type PairErrorCode =
@@ -35,6 +38,8 @@ export type PairingSocketEvent = {
   measuringSessionActive?: boolean;
   /** PC で「良い姿勢」の登録・キャリブレーション中のとき true（スナップショット等に含めてもよい） */
   goodPostureRegistrationActive?: boolean;
+  /** Included in cloud snapshots so reconnects recover the current posture. */
+  isBad?: boolean;
   eventId?: string;
   requiresAck?: boolean;
   payload?: AcquiredCharacterPayload;
