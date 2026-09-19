@@ -1,3 +1,4 @@
+import { readMeasurementResults } from '@/lib/pairing/measurement-storage';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import {
@@ -7,7 +8,7 @@ import {
 } from "expo-camera";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,7 +31,7 @@ import { usePairingSession } from "@/hooks/usePairingSession";
 import { getCatalogEntryAtSlotIndex } from "@/lib/characterCatalog";
 import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
 import { parsePairingLink } from "@/lib/pairing";
-import type { AcquiredCharacterPayload, PairingInfo } from "@/lib/pairing/types";
+import type { CompletedMeasurement, AcquiredCharacterPayload, PairingInfo } from "@/lib/pairing/types";
 
 // アセット：posture-app の PNG をそのまま流用する。
 const LOGO_WHITE_IMAGE = require("../assets/images/logo_white.png");
@@ -102,6 +103,9 @@ function isPairingInfoLike(value: unknown): value is PairingInfo {
 }
 
 export default function PairingTestScreen() {
+  const { pairingLink, intent } = useLocalSearchParams<{ pairingLink?: string; intent?: string }>();
+  const incomingLinkRef = useRef(pairingLink);
+  incomingLinkRef.current = pairingLink;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const logoAnim = useRef(new Animated.Value(0)).current;
@@ -111,6 +115,7 @@ export default function PairingTestScreen() {
   /** 同じ measurementId の再送でカード詳細モーダルを繰り返さない */
   const shownAcquisitionModalFor = useRef(new Set<string>());
   const hasHydratedAcquiredCards = useRef(false);
+  const [completedResult, setCompletedResult] = useState<CompletedMeasurement | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [visibleCollectionCount, setVisibleCollectionCount] = useState(COLLECTION_PAGE_SIZE);
@@ -129,6 +134,7 @@ export default function PairingTestScreen() {
     pairResponse,
     lastSocketEvent,
     lastAcquiredDispatch,
+    lastCompletedResult,
     isPairing,
     isSocketConnected,
     measuringSessionActive,
@@ -138,6 +144,9 @@ export default function PairingTestScreen() {
     startSocket,
     disconnect,
   } = usePairingSession();
+  useEffect(() => {
+    if (lastCompletedResult) setCompletedResult(lastCompletedResult);
+  }, [lastCompletedResult]);
   const acquiredByCharacterId = useMemo(() => {
     const map = new Map<string, AcquiredCharacterPayload>();
     for (const card of acquiredCards) {
@@ -327,10 +336,11 @@ export default function PairingTestScreen() {
     async function hydrateAcquiredCards() {
       try {
         const raw = await AsyncStorage.getItem(ACQUIRED_CARDS_STORAGE_KEY);
-        if (!raw) {
-          return;
-        }
-        const parsed = JSON.parse(raw) as unknown;
+        const results = await readMeasurementResults();
+        const latest = results.reduce<CompletedMeasurement | null>((best, result) => !best || result.endedAt > best.endedAt ? result : best, null);
+        setCompletedResult(current => current && (!latest || current.endedAt >= latest.endedAt) ? current : latest);
+        const legacy = raw ? JSON.parse(raw) : [];
+        const parsed = [...(Array.isArray(legacy) ? legacy : []), ...results.flatMap(result => result.character ? [result.character] : [])];
         if (!Array.isArray(parsed)) {
           return;
         }
@@ -340,7 +350,18 @@ export default function PairingTestScreen() {
             ...card,
             characterId: normalizeCharacterId(card.characterId),
           }));
-        setAcquiredCards(restored);
+        const unique = new Map<string, AcquiredCharacterPayload>();
+        for (const card of restored.sort((a, b) => a.acquiredAt.localeCompare(b.acquiredAt))) {
+          unique.set(card.characterId, card);
+          shownAcquisitionModalFor.current.add(card.measurementId);
+        }
+        setAcquiredCards(current => {
+          for (const card of current) {
+            const previous = unique.get(card.characterId);
+            if (!previous || card.acquiredAt >= previous.acquiredAt) unique.set(card.characterId, card);
+          }
+          return [...unique.values()];
+        });
       } catch (storageError) {
         console.warn("failed to restore acquired cards", storageError);
       } finally {
@@ -358,7 +379,7 @@ export default function PairingTestScreen() {
     async function restoreLastPairingSession() {
       try {
         const raw = await AsyncStorage.getItem(LAST_PAIRING_INFO_STORAGE_KEY);
-        if (!raw || cancelled) {
+        if (!raw || cancelled || incomingLinkRef.current) {
           return;
         }
         const parsed = JSON.parse(raw) as unknown;
@@ -367,7 +388,7 @@ export default function PairingTestScreen() {
           return;
         }
         const paired = await startPairing(parsed, getAutoDeviceName());
-        if (cancelled) {
+        if (cancelled || incomingLinkRef.current) {
           return;
         }
         if (paired) {
@@ -394,27 +415,11 @@ export default function PairingTestScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (pairResponse && !isSocketConnected && !isPairing) {
-        startSocket();
-      }
-    }, [pairResponse, isSocketConnected, isPairing, startSocket]),
-  );
-
   useEffect(() => {
-    if (!hasHydratedAcquiredCards.current) {
-      return;
-    }
-    async function persistAcquiredCards() {
-      try {
-        await AsyncStorage.setItem(ACQUIRED_CARDS_STORAGE_KEY, JSON.stringify(acquiredCards));
-      } catch (storageError) {
-        console.warn("failed to persist acquired cards", storageError);
-      }
-    }
-    void persistAcquiredCards();
-  }, [acquiredCards]);
+    if (pairingLink) void handleConnectFromLink(pairingLink);
+    // Each OS intent is consumed once; use the existing QR connection path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pairingLink, intent]);
 
   useEffect(() => {
     if (!scannerVisible) {
@@ -423,6 +428,9 @@ export default function PairingTestScreen() {
   }, [scannerVisible]);
 
   useEffect(() => {
+    if (typeof lastSocketEvent?.isBadPosture === "boolean") {
+      setIsBadPosture(lastSocketEvent.isBadPosture);
+    }
     if (lastSocketEvent?.type === "posture_bad") {
       setIsBadPosture(true);
       return;
@@ -482,13 +490,7 @@ export default function PairingTestScreen() {
       return;
     }
     const payload = lastAcquiredDispatch.payload;
-    setAcquiredCards((current) => {
-      if (current.some((card) => card.measurementId === payload.measurementId)) {
-        return current;
-      }
-      const withoutSameCharacter = current.filter((card) => card.characterId !== payload.characterId);
-      return [...withoutSameCharacter, payload];
-    });
+    setAcquiredCards(lastAcquiredDispatch.cards);
     if (!shownAcquisitionModalFor.current.has(payload.measurementId)) {
       shownAcquisitionModalFor.current.add(payload.measurementId);
       setDetailModalPayload(payload);
@@ -497,7 +499,7 @@ export default function PairingTestScreen() {
   }, [lastAcquiredDispatch]);
 
   useEffect(() => {
-    if (!isSocketConnected || !isBadPosture || !hapticEnabled) {
+    if (!isMeasuring || !isSocketConnected || !isBadPosture || !hapticEnabled) {
       if (Platform.OS !== "web") {
         Vibration.cancel();
       }
@@ -524,10 +526,10 @@ export default function PairingTestScreen() {
       clearInterval(intervalId);
       Vibration.cancel();
     };
-  }, [hapticEnabled, isBadPosture, isSocketConnected]);
+  }, [hapticEnabled, isBadPosture, isSocketConnected, isMeasuring]);
 
   useEffect(() => {
-    if (!isSocketConnected || !isBadPosture || !hapticEnabled) {
+    if (!isMeasuring || !isSocketConnected || !isBadPosture || !hapticEnabled) {
       const orphan = vibeLoopSoundRef.current;
       vibeLoopSoundRef.current = null;
       if (orphan) {
@@ -567,7 +569,7 @@ export default function PairingTestScreen() {
         void s.stopAsync().then(() => s.unloadAsync()).catch(() => {});
       }
     };
-  }, [hapticEnabled, isBadPosture, isSocketConnected]);
+  }, [hapticEnabled, isBadPosture, isSocketConnected, isMeasuring]);
 
   useEffect(() => {
     const runningAnimations: Animated.CompositeAnimation[] = [];
@@ -1116,6 +1118,14 @@ export default function PairingTestScreen() {
             <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
           </Animated.View>
         </LinearGradient>
+
+        {completedResult && (
+          <View style={{ padding: 16, backgroundColor: "#ffffff" }} accessibilityLiveRegion="polite">
+            <Text style={{ fontWeight: "700" }}>前回の測定は終了しました</Text>
+            <Text>測定時間 {Math.round(completedResult.activeMeasurementMs / 1000)}秒・良い姿勢 {Math.round(completedResult.goodRatio * 100)}%</Text>
+            <Text>{completedResult.character ? `${completedResult.character.characterName}を獲得しました` : "今回のキャラクター獲得はありません"}</Text>
+          </View>
+        )}
 
         {/* コレクションシート（Figma Frame 42：bg #FDFDFD / y=291） */}
         <View

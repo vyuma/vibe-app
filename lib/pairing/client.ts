@@ -10,6 +10,13 @@ import {
   buildWebSocketEndpoint,
 } from "./link-parser";
 
+async function fetchPairing(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try { return await fetch(url, { signal: controller.signal }); }
+  finally { clearTimeout(timeout); }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
@@ -26,7 +33,7 @@ export async function pairDevice(
   pairingInfo: PairingInfo,
   deviceName: string,
 ): Promise<PairResponse> {
-  const response = await fetch(buildPairEndpoint(pairingInfo, deviceName));
+  const response = await fetchPairing(buildPairEndpoint(pairingInfo, deviceName));
 
   if (!response.ok) {
     const payload = await parseJsonResponse<ErrorResponse | null>(response).catch(
@@ -45,7 +52,7 @@ export function connectPairingSocket(pairingInfo: PairingInfo): WebSocket {
 export async function disconnectDevice(
   pairingInfo: PairingInfo,
 ): Promise<DisconnectResponse> {
-  const response = await fetch(buildDisconnectEndpoint(pairingInfo));
+  const response = await fetchPairing(buildDisconnectEndpoint(pairingInfo));
 
   if (!response.ok) {
     const payload = await parseJsonResponse<ErrorResponse | null>(response).catch(

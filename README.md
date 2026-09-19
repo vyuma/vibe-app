@@ -1,3 +1,7 @@
+# PiiiN 모바일 앱
+
+팀 배포와 PC 연동은 [TestFlight 배포·검증 절차](docs/testflight.md)를 따른다.
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).

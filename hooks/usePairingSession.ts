@@ -1,3 +1,6 @@
+import { saveMeasurementResult } from '@/lib/pairing/measurement-storage';
+import { applySessionEvent } from '@/lib/pairing/session-state';
+import { saveAcquiredCard } from '@/lib/pairing/acquired-storage';
 import { AppState } from "react-native";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,6 +10,7 @@ import {
   pairDevice,
 } from "@/lib/pairing/client";
 import type {
+  CompletedMeasurement,
   AcquiredCharacterPayload,
   PairResponse,
   PairingInfo,
@@ -18,12 +22,15 @@ const DEFAULT_DEVICE_NAME = "vibe-app";
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
-type LastAcquiredDispatch = { key: number; payload: AcquiredCharacterPayload };
+type LastAcquiredDispatch = { key: number; cards: AcquiredCharacterPayload[]; payload: AcquiredCharacterPayload };
 
 type AcquiredCharacterEventWithFlatPayload = PairingSocketEvent &
   Partial<AcquiredCharacterPayload>;
 
 type PairingSessionState = {
+  stateSequence: number;
+  measurementId: string | null;
+  lastCompletedResult: CompletedMeasurement | null;
   pairingInfo: PairingInfo | null;
   pairResponse: PairResponse | null;
   lastSocketEvent: PairingSocketEvent | null;
@@ -42,6 +49,9 @@ type PairingSessionState = {
 };
 
 const defaultState: PairingSessionState = {
+  stateSequence: -1,
+  measurementId: null,
+  lastCompletedResult: null,
   pairingInfo: null,
   pairResponse: null,
   lastSocketEvent: null,
@@ -55,11 +65,13 @@ const defaultState: PairingSessionState = {
 
 export function usePairingSession() {
   const [state, setState] = useState<PairingSessionState>(defaultState);
+  const pairingAttemptRef = useRef(0);
   const pairingInfoRef = useRef<PairingInfo | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const shouldKeepSocketRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMessageAtRef = useRef(Date.now());
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -75,7 +87,8 @@ export function usePairingSession() {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && shouldKeepSocketRef.current) {
-        connectSocket();
+        stopSocket();
+        startSocket();
       }
     });
 
@@ -88,9 +101,14 @@ export function usePairingSession() {
     pairingInfo: PairingInfo,
     deviceName = DEFAULT_DEVICE_NAME,
   ): Promise<boolean> {
+    const attempt = ++pairingAttemptRef.current;
+    stopSocket();
+    pairingInfoRef.current = pairingInfo;
     setState((prev) => ({
       ...prev,
       pairingInfo,
+      measurementId: null,
+      stateSequence: -1,
       pairResponse: null,
       lastSocketEvent: null,
       lastAcquiredDispatch: null,
@@ -102,6 +120,7 @@ export function usePairingSession() {
 
     try {
       const pairResponse = await pairDevice(pairingInfo, deviceName);
+      if (attempt !== pairingAttemptRef.current) return false;
 
       setState((prev) => ({
         ...prev,
@@ -112,6 +131,7 @@ export function usePairingSession() {
       }));
       return true;
     } catch (error) {
+      if (attempt !== pairingAttemptRef.current) return false;
       setState((prev) => ({
         ...prev,
         isPairing: false,
@@ -183,72 +203,62 @@ export function usePairingSession() {
 
     socket.onopen = () => {
       reconnectAttemptRef.current = 0;
+      lastMessageAtRef.current = Date.now();
       startHeartbeat();
       setState((prev) => ({
         ...prev,
+        stateSequence: -1,
+        measuringSessionActive: false,
+        goodPostureRegistrationActive: false,
         isSocketConnected: true,
         error: null,
       }));
     };
 
+    let deliveries = Promise.resolve();
     socket.onmessage = (message) => {
-      try {
-        const parsed = JSON.parse(String(message.data)) as PairingSocketEvent;
-        if (
-          parsed.type === "acquired_character" &&
-          parsed.requiresAck &&
-          parsed.eventId
-        ) {
-          sendAckEvent(socket, parsed.eventId, parsed.sequence);
-        }
-        const acquiredPayload = toAcquiredPayload(parsed);
-        setState((prev) => {
-          let measuringSessionActive = prev.measuringSessionActive;
-          let goodPostureRegistrationActive = prev.goodPostureRegistrationActive;
-          if (parsed.type === "measuring_started") {
-            measuringSessionActive = true;
-            goodPostureRegistrationActive = false;
-          } else if (parsed.type === "measuring_stopped") {
-            measuringSessionActive = false;
-          } else if (typeof parsed.measuringSessionActive === "boolean") {
-            measuringSessionActive = parsed.measuringSessionActive;
+      lastMessageAtRef.current = Date.now();
+      deliveries = deliveries.then(async () => {
+        try {
+          if (socketRef.current !== socket) return;
+          const parsed = JSON.parse(String(message.data)) as PairingSocketEvent;
+          if ((parsed as { type: string }).type === "pong") return;
+          if (parsed.type === "measurement_completed") {
+            if (!parsed.result?.id || !parsed.result.sourceId) throw new Error('Invalid measurement result');
+            await saveMeasurementResult(parsed.result);
           }
-
-          if (parsed.type === "good_posture_registration_started") {
-            goodPostureRegistrationActive = true;
-          } else if (parsed.type === "good_posture_registration_stopped") {
-            goodPostureRegistrationActive = false;
-          } else if (typeof parsed.goodPostureRegistrationActive === "boolean") {
-            goodPostureRegistrationActive = parsed.goodPostureRegistrationActive;
+          const acquiredPayload = toAcquiredPayload(parsed);
+          const cards = acquiredPayload ? await saveAcquiredCard(acquiredPayload) : null;
+          if (socketRef.current !== socket) return;
+          if ((acquiredPayload || parsed.type === "measurement_completed") && parsed.requiresAck && parsed.eventId) {
+            sendAckEvent(socket, parsed.eventId, parsed.sequence);
           }
+          setState((prev) => {
+            const session = applySessionEvent(prev, parsed);
+            let lastAcquiredDispatch = prev.lastAcquiredDispatch;
+            if (acquiredPayload) {
+              lastAcquiredDispatch = {
+                key: (prev.lastAcquiredDispatch?.key ?? 0) + 1,
+                payload: acquiredPayload,
+                cards: cards!,
+              };
+            }
 
-          if (measuringSessionActive) {
-            goodPostureRegistrationActive = false;
-          }
-
-          let lastAcquiredDispatch = prev.lastAcquiredDispatch;
-          if (acquiredPayload) {
-            lastAcquiredDispatch = {
-              key: (prev.lastAcquiredDispatch?.key ?? 0) + 1,
-              payload: acquiredPayload,
+            return {
+              ...session,
+              lastAcquiredDispatch,
+              lastCompletedResult: parsed.result && (!prev.lastCompletedResult || parsed.result.endedAt > prev.lastCompletedResult.endedAt)
+                ? parsed.result : prev.lastCompletedResult,
+              error: null,
             };
-          }
-
-          return {
+          });
+        } catch {
+          setState((prev) => ({
             ...prev,
-            lastSocketEvent: parsed,
-            lastAcquiredDispatch,
-            measuringSessionActive,
-            goodPostureRegistrationActive,
-            error: null,
-          };
-        });
-      } catch {
-        setState((prev) => ({
-          ...prev,
-          error: "WebSocketメッセージの解析に失敗しました",
-        }));
-      }
+            error: "受信データの解析・保存に失敗しました。再接続して再試行してください。",
+          }));
+        }
+      });
     };
 
     socket.onerror = () => {
@@ -286,12 +296,13 @@ export function usePairingSession() {
         ackEventId: eventId,
         ackSequence: sequence,
         receivedAt: new Date().toISOString(),
-        status: "received",
+        status: "stored",
       }),
     );
   }
 
   async function disconnect() {
+    ++pairingAttemptRef.current;
     const activePairingInfo = pairingInfoRef.current;
     stopSocket();
 
@@ -348,6 +359,10 @@ export function usePairingSession() {
         return;
       }
 
+      if (Date.now() - lastMessageAtRef.current > 60_000) {
+        socket.close();
+        return;
+      }
       socket.send(JSON.stringify({ type: "ping", at: new Date().toISOString() }));
     }, HEARTBEAT_INTERVAL_MS);
   }
@@ -371,7 +386,7 @@ export function usePairingSession() {
 }
 
 function toAcquiredPayload(parsed: PairingSocketEvent): AcquiredCharacterPayload | null {
-  if (parsed.type !== "acquired_character") {
+  if (parsed.type !== "acquired_character" && parsed.type !== "measurement_completed") {
     return null;
   }
 
