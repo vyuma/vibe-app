@@ -33,7 +33,7 @@ test('pairing intent routes cold and warm launches; invalid port rejected', () =
 test('receipt is ACKed only after durable save; retries deduplicate; storage failure stays unacked', async () => {
   let saved = null, release, fail = false;
   const storage = {
-    getItem: async () => saved,
+    getItem: async key => key === "PAIRING_ACQUIRED_CARDS_V1" ? saved : null,
     setItem: async (_key, value) => { if (fail) throw Error('disk full'); await new Promise(r => { release = r; }); saved = value; },
   };
   let socket;
@@ -125,5 +125,91 @@ test('completed result ACK waits for both result journal and character projectio
     writes.shift()(); await settle(); assert.equal(socket.sent.length, 0);
     writes.shift()(); await settle(); assert.equal(socket.sent.length, 1);
     assert.equal(socket.sent[0].status, 'stored'); assert.equal(values.size, 2);
+  } finally { session.stopSocket(); global.WebSocket = previous; }
+});
+
+test('reset survives reload and suppresses replay without deleting history or another PC; newer rewards survive stale resets', async () => {
+  const values = new Map();
+  const storage = { getItem: async key => values.get(key) ?? null, setItem: async (key, value) => values.set(key, value) };
+  const mocks = { '@react-native-async-storage/async-storage': storage };
+  let cards = load('lib/pairing/acquired-storage.ts', mocks);
+  const history = load('lib/pairing/measurement-storage.ts', mocks);
+  const old = { measurementId: 'old', sourceId: 'pc1', characterId: 'normal-nago', acquiredAt: '2026-09-19T00:00:00Z' };
+  await cards.saveAcquiredCard(old);
+  await history.saveMeasurementResult({ id: 'old', sourceId: 'pc1', character: old });
+  await cards.saveAcquiredCard({ ...old, sourceId: 'pc2', characterId: 'aka-nago' });
+  await cards.applyCollectionReset({ sourceId: 'pc1', measurementIds: ['old'] });
+  cards = load('lib/pairing/acquired-storage.ts', mocks); // app restart
+  assert.deepEqual((await cards.readAcquiredCards()).map(c => c.sourceId), ['pc2']);
+  await cards.saveAcquiredCard(old); // in-flight / offline result replay
+  assert.equal((await cards.readAcquiredCards()).length, 1);
+  const newer = { ...old, measurementId: 'new', acquiredAt: '2026-09-19T00:02:00Z' };
+  await cards.saveAcquiredCard(newer);
+  await cards.applyCollectionReset({ sourceId: 'pc1', measurementIds: ['old'] });
+  assert.equal((await cards.readAcquiredCards()).length, 2);
+  await cards.applyCollectionReset({ sourceId: 'pc1', measurementIds: ['new'] }); // merge, never replace tombstones
+  await cards.applyCollectionReset({ sourceId: 'pc1', measurementIds: ['old'] });
+  await cards.saveAcquiredCard(newer);
+  assert.equal((await cards.readAcquiredCards()).length, 1);
+  assert.equal((await history.readMeasurementResults()).length, 1);
+});
+
+test('reset ACK waits for tombstone and projection, repairs partial failure on retry and closes the card dispatch', async () => {
+  const old = { measurementId: 'old', characterId: 'normal-nago', acquiredAt: '2026-09-19' };
+  const values = new Map([['PAIRING_ACQUIRED_CARDS_V1', JSON.stringify([old])]]);
+  const writes = []; let failProjection = true, socket, state;
+  const storage = { getItem: async key => values.get(key) ?? null, setItem: async (key, value) => {
+    if (key === 'PAIRING_ACQUIRED_CARDS_V1' && failProjection) throw Error('disk full');
+    await new Promise(resolve => writes.push(() => { values.set(key, value); resolve(); }));
+  } };
+  class Socket { static OPEN = 1; static CONNECTING = 0; readyState = 1; sent = [];
+    constructor() { socket = this; } send(value) { this.sent.push(JSON.parse(value)); } close() { this.readyState = 3; } }
+  const previous = global.WebSocket; global.WebSocket = Socket;
+  const mocks = { '@react-native-async-storage/async-storage': storage,
+    react: { useRef: current => ({ current }), useEffect: () => {}, useState: initial => { state = initial; return [state, update => { state = typeof update === 'function' ? update(state) : update; }]; } },
+    'react-native': { AppState: {} },
+    '@/lib/pairing/client': { pairDevice: async () => ({ ok: true, paired: true }), connectPairingSocket: () => new Socket() } };
+  const session = load('hooks/usePairingSession.ts', mocks).usePairingSession();
+  try {
+    await session.startPairing({ host: '192.168.1.2', port: 1234, token: 'test' }); session.startSocket();
+    const reset = { type: 'collection_reset', sequence: 10, eventId: 'reset1', requiresAck: true, collectionReset: { sourceId: 'pc1', measurementIds: ['old'] } };
+    socket.onmessage({ data: JSON.stringify(reset) }); await settle();
+    assert.equal(socket.sent.length, 0); writes.shift()(); await settle();
+    assert.equal(socket.sent.length, 0); assert(state.error); // marker stored; cards write failed
+    failProjection = false;
+    socket.onmessage({ data: JSON.stringify(reset) }); await settle();
+    assert.equal(socket.sent.length, 0); writes.shift()(); await settle();
+    assert.equal(socket.sent[0].status, 'stored');
+    assert.deepEqual(state.lastAcquiredDispatch.cards, []); assert.equal(state.lastAcquiredDispatch.payload, null);
+    socket.onmessage({ data: JSON.stringify({ type: 'snapshot', sequence: 11, collectionReset: reset.collectionReset }) }); await settle();
+    assert.deepEqual(state.lastAcquiredDispatch.cards, []);
+  } finally { session.stopSocket(); global.WebSocket = previous; }
+});
+
+test('cold reconnect snapshot alone applies a missed reset and retains another PC reward of the same character', async () => {
+  const values = new Map();
+  const mocks = { '@react-native-async-storage/async-storage': { getItem: async key => values.get(key) ?? null, setItem: async (key, value) => values.set(key, value) } };
+  const history = load('lib/pairing/measurement-storage.ts', mocks);
+  const cards = load('lib/pairing/acquired-storage.ts', mocks);
+  const old = { measurementId: 'pc1-old', sourceId: 'pc1', characterId: 'normal-nago', acquiredAt: '2026-09-19' };
+  const other = { ...old, measurementId: 'pc2-old', sourceId: 'pc2', acquiredAt: '2026-09-18' };
+  await history.saveMeasurementResult({ id: old.measurementId, sourceId: old.sourceId, character: old });
+  await history.saveMeasurementResult({ id: other.measurementId, sourceId: other.sourceId, character: other });
+  await cards.saveAcquiredCard(old);
+  let socket, state;
+  class Socket { static OPEN = 1; static CONNECTING = 0; readyState = 1;
+    constructor() { socket = this; } send() {} close() { this.readyState = 3; } }
+  const previous = global.WebSocket; global.WebSocket = Socket;
+  const session = load('hooks/usePairingSession.ts', { ...mocks,
+    react: { useRef: current => ({ current }), useEffect: () => {}, useState: initial => { state = initial; return [state, update => { state = typeof update === 'function' ? update(state) : update; }]; } },
+    'react-native': { AppState: {} },
+    '@/lib/pairing/client': { pairDevice: async () => ({ ok: true, paired: true }), connectPairingSocket: () => new Socket() } }).usePairingSession();
+  try {
+    await session.startPairing({ host: '192.168.1.2', port: 1234, token: 'test' }); session.startSocket();
+    socket.onmessage({ data: JSON.stringify({ type: 'snapshot', sequence: 1, measurementId: 'new', measuringSessionActive: true, collectionReset: { sourceId: 'pc1', measurementIds: ['pc1-old'] } }) });
+    await settle();
+    assert.equal(state.measuringSessionActive, true);
+    assert.deepEqual(state.lastAcquiredDispatch.cards.map(c => c.sourceId), ['pc2']);
+    assert.deepEqual((await load('lib/pairing/acquired-storage.ts', mocks).readAcquiredCards()).map(c => c.sourceId), ['pc2']);
   } finally { session.stopSocket(); global.WebSocket = previous; }
 });

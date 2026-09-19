@@ -1,6 +1,6 @@
 import { saveMeasurementResult } from '@/lib/pairing/measurement-storage';
 import { applySessionEvent } from '@/lib/pairing/session-state';
-import { saveAcquiredCard } from '@/lib/pairing/acquired-storage';
+import { saveAcquiredCard, applyCollectionReset } from '@/lib/pairing/acquired-storage';
 import { AppState } from "react-native";
 import { useEffect, useRef, useState } from "react";
 
@@ -22,7 +22,7 @@ const DEFAULT_DEVICE_NAME = "vibe-app";
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
-type LastAcquiredDispatch = { key: number; cards: AcquiredCharacterPayload[]; payload: AcquiredCharacterPayload };
+type LastAcquiredDispatch = { key: number; cards: AcquiredCharacterPayload[]; payload: AcquiredCharacterPayload | null };
 
 type AcquiredCharacterEventWithFlatPayload = PairingSocketEvent &
   Partial<AcquiredCharacterPayload>;
@@ -223,20 +223,25 @@ export function usePairingSession() {
           if (socketRef.current !== socket) return;
           const parsed = JSON.parse(String(message.data)) as PairingSocketEvent;
           if ((parsed as { type: string }).type === "pong") return;
+          const resetCards = parsed.collectionReset ? await applyCollectionReset(parsed.collectionReset) : null;
           if (parsed.type === "measurement_completed") {
             if (!parsed.result?.id || !parsed.result.sourceId) throw new Error('Invalid measurement result');
             await saveMeasurementResult(parsed.result);
           }
-          const acquiredPayload = toAcquiredPayload(parsed);
+          const rawPayload = toAcquiredPayload(parsed);
+          const acquiredPayload = rawPayload ? { ...rawPayload, sourceId: parsed.result?.sourceId ?? rawPayload.sourceId ?? parsed.collectionReset?.sourceId } : null;
           const cards = acquiredPayload ? await saveAcquiredCard(acquiredPayload) : null;
           if (socketRef.current !== socket) return;
-          if ((acquiredPayload || parsed.type === "measurement_completed") && parsed.requiresAck && parsed.eventId) {
+          if ((acquiredPayload || parsed.type === "measurement_completed" || parsed.collectionReset) && parsed.requiresAck && parsed.eventId) {
             sendAckEvent(socket, parsed.eventId, parsed.sequence);
           }
           setState((prev) => {
             const session = applySessionEvent(prev, parsed);
             let lastAcquiredDispatch = prev.lastAcquiredDispatch;
-            if (acquiredPayload) {
+            if (resetCards !== null) {
+              lastAcquiredDispatch = { key: (prev.lastAcquiredDispatch?.key ?? 0) + 1, payload: null, cards: resetCards };
+            }
+            if (acquiredPayload && cards?.some(card => card.measurementId === acquiredPayload.measurementId && card.sourceId === acquiredPayload.sourceId)) {
               lastAcquiredDispatch = {
                 key: (prev.lastAcquiredDispatch?.key ?? 0) + 1,
                 payload: acquiredPayload,

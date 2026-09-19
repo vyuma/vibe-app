@@ -13,8 +13,12 @@ export type PairErrorCode =
   | "NOT_PAIRED"
   | "INTERNAL_ERROR";
 
+export type CollectionReset = { sourceId: string; measurementIds: string[] };
+
 export type PairingSocketEvent = {
+  collectionReset?: CollectionReset | null;
   type:
+    | "collection_reset"
     | "measurement_completed"
     | "snapshot"
     | "paired"
@@ -56,6 +60,7 @@ export type CharacterColorPayload = {
 };
 
 export type AcquiredCharacterPayload = {
+  sourceId?: string;
   measurementId: string;
   acquiredAt: string;
   characterId: string;
