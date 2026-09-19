@@ -117,6 +117,8 @@ export default function PairingTestScreen() {
   const hasHydratedAcquiredCards = useRef(false);
   const [completedResult, setCompletedResult] = useState<CompletedMeasurement | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [qrButtonMeasuredHeight, setQrButtonMeasuredHeight] = useState(0);
+  const [qrHintMeasuredHeight, setQrHintMeasuredHeight] = useState(0);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [visibleCollectionCount, setVisibleCollectionCount] = useState(COLLECTION_PAGE_SIZE);
   const [hasScanned, setHasScanned] = useState(false);
@@ -179,7 +181,6 @@ export default function PairingTestScreen() {
   const sx = useCallback((value: number) => value * layoutScale, [layoutScale]);
   // Figma `モバイル/ホーム` 390x844 の実測値。狭い端末は同じ比率で縮小し、
   // タブレットと横向きでは 456px の中央カラムに収める。
-  const heroHeight = sx(378);
   const logoWidth = sx(80);
   const logoHeight = sx(48);
   const heroLogoTop = sx(60);
@@ -191,7 +192,11 @@ export default function PairingTestScreen() {
   const qrButtonRadius = sx(100);
   const qrButtonLabelFont = sx(16);
   const qrButtonLabelLine = sx(19);
-  const heroQrHintTop = sx(227);
+  const heroQrHintTop = Math.max(sx(227), heroQrTop + qrButtonMeasuredHeight + sx(16));
+  const heroHeight = Math.max(
+    sx(378),
+    heroQrHintTop + Math.max(sx(48), qrHintMeasuredHeight) + sx(103),
+  );
   const heroQrHintFont = sx(12);
   const heroQrHintLine = sx(24);
   const anagoWidth = sx(147);
@@ -212,7 +217,6 @@ export default function PairingTestScreen() {
   const collectionCountFont = sx(32);
   const collectionCountLine = sx(38);
   const collectionSubFont = sx(16);
-  const collectionSubLine = sx(19);
   const collectionGap = sx(18.56);
   const collectionCardWidth =
     (layoutWidth - collectionPaddingHorizontal * 2 - collectionGap) / 2;
@@ -244,10 +248,8 @@ export default function PairingTestScreen() {
   const registerTitleTop = registerCardSize * (32 / 320);
   const registerSubtitleFont = sx(16);
   const registerSubtitleLine = sx(19);
-  const registerSubtitleTop = registerCardSize * (85 / 320);
   const registerAnagoWidth = registerCardSize * (168 / 320);
   const registerAnagoHeight = registerCardSize * (270 / 320);
-  const registerAnagoTop = registerCardSize * (116 / 320);
   const registerAnagoLeft = (registerCardSize - registerAnagoWidth) / 2;
   // 日本語: 測定 UI は HTTP ペア済みかつ WS 接続中かつ PC 側が measuring のときのみ（切断時に古い状態で残さない）
   const isMeasuring = isConnected && isSocketConnected && measuringSessionActive;
@@ -857,8 +859,8 @@ export default function PairingTestScreen() {
                 style={[
                   styles.registerCardOuter,
                   {
-                    position: "absolute",
-                    top: measureCardTop,
+                    marginTop: measureCardTop,
+                    marginBottom: sx(32) + insets.bottom,
                     width: registerCardSize,
                     borderRadius: registerCardRadius,
                     shadowRadius: sx(8.52),
@@ -869,7 +871,7 @@ export default function PairingTestScreen() {
                     styles.registerCardInner,
                     {
                       width: registerCardSize,
-                      height: registerCardSize,
+                      minHeight: registerCardSize,
                       borderRadius: registerCardRadius,
                     },
                   ]}>
@@ -879,43 +881,39 @@ export default function PairingTestScreen() {
                     style={[
                       styles.registerPostureTitle,
                       {
-                        top: registerTitleTop,
+                        marginTop: registerTitleTop,
                         fontSize: registerTitleFont,
                         lineHeight: registerTitleLine,
-                        height: registerTitleLine,
-                        left: sx(32),
-                        right: sx(32),
+                        marginHorizontal: sx(32),
                       },
                     ]}>
                     良い姿勢を登録中
                   </Text>
                   <Text
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureSubtitle,
                       {
-                        top: registerSubtitleTop,
+                        marginTop: sx(24),
                         fontSize: registerSubtitleFont,
                         lineHeight: registerSubtitleLine,
-                        height: registerSubtitleLine,
-                        left: sx(32),
-                        right: sx(32),
+                        marginHorizontal: sx(32),
                       },
                     ]}>
                     PCで姿勢登録をしてください
                   </Text>
+                  <View style={{ height: sx(204), marginTop: sx(12), overflow: "hidden" }}>
                   <Image
                     source={GOOD_POSTURE_REGISTER_CHARACTER_IMAGE}
                     style={{
                       position: "absolute",
                       left: registerAnagoLeft,
-                      top: registerAnagoTop,
+                      top: 0,
                       width: registerAnagoWidth,
                       height: registerAnagoHeight,
                     }}
                     contentFit="contain"
                   />
+                  </View>
                 </View>
               </View>
               </View>
@@ -970,10 +968,10 @@ export default function PairingTestScreen() {
                 style={[
                   styles.measureCard,
                   {
-                    position: "absolute",
-                    top: measureCardTop,
+                    marginTop: measureCardTop,
+                    marginBottom: sx(32) + insets.bottom,
                     width: measureCardSize,
-                    height: measureCardSize,
+                    minHeight: measureCardSize,
                     borderRadius: measureCardRadius,
                   },
                 ]}>
@@ -983,38 +981,33 @@ export default function PairingTestScreen() {
                   style={[
                     styles.measureTitle,
                     {
-                      top: registerTitleTop,
+                      marginTop: registerTitleTop,
                       fontSize: registerTitleFont,
                       lineHeight: registerTitleLine,
-                      height: registerTitleLine,
-                      left: sx(32),
-                      right: sx(32),
+                      marginHorizontal: sx(32),
                     },
                   ]}>
                   姿勢測定中
                 </Text>
                 <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
                   style={[
                     styles.registerPostureSubtitle,
                     {
-                      top: registerSubtitleTop,
+                      marginTop: sx(24),
                       fontSize: registerSubtitleFont,
                       lineHeight: registerSubtitleLine,
-                      height: registerSubtitleLine,
-                      left: sx(32),
-                      right: sx(32),
+                      marginHorizontal: sx(32),
                     },
                   ]}>
                   スマホの画面を閉じないでください
                 </Text>
+                <View style={{ height: sx(204), marginTop: sx(12), overflow: "hidden" }}>
                 <Animated.View
                   style={[
                     styles.measureAnago,
                     {
                       left: registerAnagoLeft,
-                      top: registerAnagoTop,
+                      top: 0,
                       width: registerAnagoWidth,
                       height: registerAnagoHeight,
                     },
@@ -1036,6 +1029,7 @@ export default function PairingTestScreen() {
                   ) : null}
                   <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
                 </Animated.View>
+                </View>
               </View>
               </View>
             </ScrollView>
@@ -1086,6 +1080,7 @@ export default function PairingTestScreen() {
           {/* QRスキャンボタン（Figma ボタン：179×51 / radius 100） */}
           <Pressable
             disabled={isPairing}
+            onLayout={(event) => setQrButtonMeasuredHeight(event.nativeEvent.layout.height)}
             onPress={() => void handleOpenScanner()}
             style={({ pressed }) => [
               styles.qrButton,
@@ -1093,7 +1088,9 @@ export default function PairingTestScreen() {
                 left: qrLeft,
                 top: heroQrTop,
                 width: qrButtonWidth,
-                height: qrButtonHeight,
+                minHeight: qrButtonHeight,
+                paddingVertical: sx(16),
+                paddingHorizontal: sx(20),
                 borderRadius: qrButtonRadius,
                 shadowRadius: sx(12),
                 shadowOffset: { width: 0, height: sx(6) },
@@ -1101,6 +1098,8 @@ export default function PairingTestScreen() {
               pressed && styles.qrButtonPressed,
             ]}>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.qrButtonLabel,
                 { fontSize: qrButtonLabelFont, lineHeight: qrButtonLabelLine },
@@ -1111,6 +1110,7 @@ export default function PairingTestScreen() {
 
           {/* 案内文（Figma：12px / lineHeight 24） */}
           <Text
+            onLayout={(event) => setQrHintMeasuredHeight(event.nativeEvent.layout.height)}
             style={[
               styles.qrHint,
               {
@@ -1169,38 +1169,20 @@ export default function PairingTestScreen() {
               コレクション
             </Text>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.collectionCount,
                 {
                   fontSize: collectionCountFont,
                   lineHeight: collectionCountLine,
-                  marginRight: sx(8),
+                  maxWidth: "100%",
                 },
               ]}>
               {acquiredCount}
-            </Text>
-            <Text
-              style={[
-                styles.collectionDivider,
-                {
-                  fontSize: collectionSubFont,
-                  lineHeight: collectionSubLine,
-                  marginRight: sx(5),
-                  paddingBottom: sx(2),
-                },
-              ]}>
-              /
-            </Text>
-            <Text
-              style={[
-                styles.collectionTotal,
-                {
-                  fontSize: collectionSubFont,
-                  lineHeight: collectionSubLine,
-                  paddingBottom: sx(2),
-                },
-              ]}>
-              {COLLECTION_TOTAL}
+              <Text style={{ fontSize: collectionSubFont, color: "#666666" }}>
+                {` / ${COLLECTION_TOTAL}`}
+              </Text>
             </Text>
           </View>
 
@@ -1385,7 +1367,7 @@ const styles = StyleSheet.create({
     left: px(37),
     top: px(155),
     width: px(170),
-    height: px(51),
+    minHeight: px(51),
     borderRadius: 100,
     backgroundColor: "#ffffff",
     alignItems: "center",
@@ -1400,6 +1382,8 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   qrButtonLabel: {
+    width: "100%",
+    textAlign: "center",
     fontSize: px(16),
     lineHeight: px(19),
     fontWeight: "700",
@@ -1433,10 +1417,12 @@ const styles = StyleSheet.create({
   },
   collectionHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-end",
     marginBottom: px(20),
   },
   collectionLabel: {
+    maxWidth: "100%",
     fontSize: px(16),
     lineHeight: px(19),
     fontWeight: "700",
@@ -1594,7 +1580,7 @@ const styles = StyleSheet.create({
   // 測定中カード（QR 読み取り後の専用画面）。
   measureCard: {
     width: px(320),
-    height: px(320),
+    minHeight: px(320),
     borderRadius: px(24),
     backgroundColor: "#ffffff",
     position: "relative",
@@ -1605,7 +1591,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   measureTitle: {
-    position: "absolute",
     textAlign: "center",
     fontSize: px(32),
     lineHeight: px(38),
@@ -1635,17 +1620,11 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   registerPostureTitle: {
-    position: "absolute",
-    left: 0,
-    right: 0,
     textAlign: "center",
     fontWeight: "700",
     color: "#13a2d7",
   },
   registerPostureSubtitle: {
-    position: "absolute",
-    left: 0,
-    right: 0,
     textAlign: "center",
     fontWeight: "700",
     color: "#989898",

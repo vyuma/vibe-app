@@ -144,7 +144,6 @@ export function AcquisitionResultModal({
                 detailFlush
                 detailScale={scale}
                 detailScrollEnabled={false}
-                scrollMaxHeight={s(800)}
                 detailPortraitTune={{
                   ...PORTRAIT_TUNE,
                   offsetY: s(PORTRAIT_TUNE.offsetY),

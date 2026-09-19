@@ -81,7 +81,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   detailFlush = false,
   detailPortraitTune,
 }: CharacterResultCardProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
   const [detailCardInnerWidth, setDetailCardInnerWidth] = useState(0);
 
   /** 詳細：Frame 51 内の左右 padding 24 を除いた幅（キャラ枠 262 の上限に使う） */
@@ -173,19 +173,23 @@ export const CharacterResultCard = memo(function CharacterResultCard({
   const scrollStyle = scrollMaxHeight != null ? { maxHeight: scrollMaxHeight } : styles.scroll;
 
   const pctInt = Math.round(Math.max(0, Math.min(1, goodRatio)) * 100);
+  // 大きな文字や長時間の計測では、数値を分断するより項目を縦に積む。
+  const stackStats = fontScale > 1.2 || formatDuration(goodMs).length > 5;
 
   if (detailLayout) {
+    // 外側がスクロールを担当する場合は、内側にScrollViewを残さない。
+    // 大きな文字で伸びた高さを親に伝え、下部までスワイプできるようにする。
+    const DetailContainer = detailScrollEnabled ? ScrollView : View;
+    const contentStyle = [
+      styles.scrollContentDetail,
+      styles.detailScrollContent,
+      detailFlush && styles.detailScrollContentFlush,
+    ];
+    const containerProps = detailScrollEnabled
+      ? { style: scrollStyle, contentContainerStyle: contentStyle, showsVerticalScrollIndicator: false, nestedScrollEnabled: true }
+      : { style: contentStyle };
     return (
-      <ScrollView
-        style={scrollStyle}
-        contentContainerStyle={[
-          styles.scrollContentDetail,
-          styles.detailScrollContent,
-          detailFlush && styles.detailScrollContentFlush,
-        ]}
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-        scrollEnabled={detailScrollEnabled}>
+      <DetailContainer {...containerProps}>
         <View
           style={[
             styles.detailFrame51,
@@ -231,6 +235,8 @@ export const CharacterResultCard = memo(function CharacterResultCard({
           </View>
 
           <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
             style={[
               styles.detailCharacterName,
               {
@@ -267,16 +273,14 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                       fontSize: 10 * detailContentScale,
                       lineHeight: 12 * detailContentScale,
                     },
-                  ]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail">
+                  ]}>
                   {tag}
                 </Text>
               </View>
             ))}
           </View>
 
-          <View style={[styles.detailStatRow, { marginTop: 24 * detailContentScale }]}>
+          <View style={[styles.detailStatRow, { marginTop: 24 * detailContentScale }, stackStats && { flexDirection: "column", gap: 16 * detailContentScale }]}>
             <View style={styles.detailStatColLeft}>
               <Text
                 style={[
@@ -286,6 +290,8 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                 良い姿勢時間
               </Text>
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
                 style={[
                   styles.detailStatValueNum,
                   {
@@ -307,8 +313,9 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                 ]}>
                 良い姿勢率
               </Text>
-              <View style={styles.detailPercentRow}>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.detailStatValueNum,
                     {
@@ -318,7 +325,6 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                     },
                   ]}>
                   {pctInt}
-                </Text>
                 <Text
                   style={[
                     styles.detailPercentSymbol,
@@ -331,7 +337,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                   ]}>
                   %
                 </Text>
-              </View>
+                </Text>
             </View>
           </View>
 
@@ -364,6 +370,8 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                 </Text>
               </View>
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
                 style={[
                   styles.detailMetaValue,
                   {
@@ -392,6 +400,8 @@ export const CharacterResultCard = memo(function CharacterResultCard({
                 </Text>
               </View>
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
                 style={[
                   styles.detailMetaValue,
                   {
@@ -405,7 +415,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
             </View>
           </View>
         </View>
-      </ScrollView>
+      </DetailContainer>
     );
   }
 
@@ -565,13 +575,14 @@ const styles = StyleSheet.create({
   },
   detailTagsRow: {
     flexDirection: "row",
-    flexWrap: "nowrap",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 16,
     width: "100%",
     minWidth: 0,
   },
   detailTagPill: {
+    maxWidth: "100%",
     flexShrink: 1,
     borderRadius: 100,
     paddingVertical: 8,
@@ -593,11 +604,12 @@ const styles = StyleSheet.create({
   detailStatColLeft: {
     flex: 1,
     minWidth: 0,
+    alignSelf: "stretch",
   },
   detailStatColRight: {
     flex: 1,
     minWidth: 0,
-    alignItems: "flex-start",
+    alignSelf: "stretch",
   },
   detailStatLabel: {
     fontSize: 10,
@@ -614,11 +626,6 @@ const styles = StyleSheet.create({
     fontSize: 48,
     lineHeight: 57,
     fontWeight: "700",
-  },
-  detailPercentRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
   },
   detailPercentSymbol: {
     fontSize: 24,
@@ -638,6 +645,7 @@ const styles = StyleSheet.create({
   },
   detailMetaRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
   },
@@ -645,6 +653,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
+    maxWidth: "100%",
   },
   detailMetaIcon: {
     marginRight: 8,
@@ -661,7 +670,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#000000",
     textAlign: "right",
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
     marginLeft: 12,
   },
   card: {

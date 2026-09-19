@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { memo, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import type { CharacterCatalogEntry } from "@/lib/characterCatalog";
 import type { AcquiredCharacterPayload } from "@/lib/pairing/types";
@@ -65,6 +65,7 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
   onPressAcquired,
   acquiredPortraitTune,
 }: CollectionSlotCardProps) {
+  const { fontScale } = useWindowDimensions();
   const paddedSlot = String(slotNumber).padStart(3, "0");
   const isAcquired = Boolean(catalogEntry && acquiredPayload);
 
@@ -145,9 +146,9 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
       onPress={onPressAcquired}
       style={({ pressed }) => [
         styles.cardBase,
-        styles.acquiredCardLayout,
         acquiredCardStyle,
-        { width, height, borderRadius },
+        styles.acquiredCardLayout,
+        { width, height: "auto", minHeight: height, borderRadius },
         pressed && styles.acquiredPressed,
       ]}
       accessibilityRole="button"
@@ -182,20 +183,20 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
         </View>
         <View style={[styles.metaBlock, { width: previewSide }]}>
           <Text
-            style={styles.characterName}
             numberOfLines={1}
-            ellipsizeMode="tail">
+            adjustsFontSizeToFit
+            style={styles.characterName}>
             {character.name}
           </Text>
-          <View style={styles.tagsRow}>
+          <View style={[styles.tagsRow, fontScale > 1.2 && { flexDirection: "column" }]}>
             {tags.map((tag, index) => (
               <View
                 key={`${tag}-${index}`}
-                style={[styles.tagPill, { backgroundColor: `${primary}28` }]}>
+                style={[styles.tagPill, { backgroundColor: `${primary}28` }, fontScale > 1.2 && { flex: 0 }]}>
                 <Text
-                  style={[styles.tagText, { color: primary }]}
                   numberOfLines={1}
-                  ellipsizeMode="tail">
+                  adjustsFontSizeToFit
+                  style={[styles.tagText, { color: primary }]}>
                   {tag}
                 </Text>
               </View>
@@ -229,7 +230,6 @@ const styles = StyleSheet.create({
   },
   /** 角丸内にテキストを収める（Pressable 側は影用に visible のまま） */
   acquiredClip: {
-    flex: 1,
     overflow: "hidden",
     alignItems: "center",
     minWidth: 0,
@@ -247,7 +247,6 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   metaBlock: {
-    flex: 1,
     alignSelf: "center",
     paddingBottom: 8,
     paddingTop: 6,
