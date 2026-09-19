@@ -52,3 +52,38 @@ test('PC journals completion without phone response and can replay after process
     assert.equal(reloaded.readCompletedMeasurements().length, 2); // transient write failure is retried without losing result
   } finally { global.localStorage = previous; }
 });
+
+test('PC reset persists before local deletion, replays after restart, and preserves measurement history', async () => {
+  const values = new Map(); const previous = global.localStorage; const previousWindow = global.window;
+  global.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  global.window = { localStorage: global.localStorage };
+  const calls = [];
+  const resetFile = path.join(pc, 'src/features/characters/collectionResetStorage.ts');
+  const file = path.join(pc, 'src/features/pairing/services/measurementDelivery.ts');
+  const mocks = { '../../characters/collectionResetStorage': load(resetFile), '@tauri-apps/api/core': { invoke: async (command, args) => calls.push({ command, args }) } };
+  try {
+    const delivery = load(file, mocks);
+    const character = { measurementId: 'old', characterId: 'normal-nago', acquiredAt: '2026-09-19' };
+    const chars = load(path.join(pc, 'src/features/characters/characterStorage.ts'), { './collectionResetStorage': load(resetFile), './characterIds': { normalizeCharacterId: id => id } });
+    chars.saveAcquiredCharacters([character]);
+    delivery.saveCompletedMeasurement({ id: 'old' }, character);
+    const setItem = global.localStorage.setItem;
+    global.localStorage.setItem = (key, value) => { if (key.includes('collection-reset')) throw Error('disk full'); setItem(key, value); };
+    assert.throws(() => delivery.resetCollection(['old']), /disk full/);
+    assert.equal(chars.loadAcquiredCharacters().length, 1);
+    global.localStorage.setItem = setItem;
+    delivery.resetCollection(['old', 'legacy']);
+    // Simulate process exit before the UI callback clears the old localStorage array.
+    assert.equal(chars.loadAcquiredCharacters().length, 0);
+    const reloaded = load(file, mocks);
+    assert.equal(reloaded.readCompletedMeasurements().length, 1);
+    await reloaded.publishCollectionReset(reloaded.readCollectionReset());
+    assert.equal(calls[0].command, 'emit_acquired_characters_cleared');
+    assert.deepEqual(calls[0].args.reset.measurementIds.sort(), ['legacy', 'old']);
+    const newer = { ...character, measurementId: 'new' };
+    chars.saveAcquiredCharacters([newer]);
+    assert.equal(chars.loadAcquiredCharacters().length, 1);
+    reloaded.resetCollection(['new']);
+    assert.deepEqual(reloaded.readCollectionReset().measurementIds.sort(), ['legacy', 'new', 'old']);
+  } finally { global.localStorage = previous; global.window = previousWindow; }
+});

@@ -1,3 +1,4 @@
+import { readAcquiredCards } from "@/lib/pairing/acquired-storage";
 import { readMeasurementResults } from '@/lib/pairing/measurement-storage';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
@@ -26,6 +27,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AcquisitionResultModal } from "@/components/pairing/AcquisitionResultModal";
+import { CharacterInfoModal } from "@/components/pairing/CharacterInfoModal";
 import { CollectionSlotCard } from "@/components/pairing/CollectionSlotCard";
 import { usePairingSession } from "@/hooks/usePairingSession";
 import { getCatalogEntryAtSlotIndex } from "@/lib/characterCatalog";
@@ -65,24 +67,10 @@ const px = (value: number) => value * SCALE;
 const SCAN_GUIDE_RATIO = 0.62;
 const SCAN_GUIDE_MIN = 200;
 const SCAN_GUIDE_MAX = 360;
-const ACQUIRED_CARDS_STORAGE_KEY = "PAIRING_ACQUIRED_CARDS_V1";
 const LAST_PAIRING_INFO_STORAGE_KEY = "PAIRING_LAST_PAIRING_INFO_V1";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function isAcquiredCharacterPayloadLike(value: unknown): value is AcquiredCharacterPayload {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.measurementId === "string" &&
-    candidate.measurementId.length > 0 &&
-    typeof candidate.characterId === "string" &&
-    candidate.characterId.length > 0
-  );
 }
 
 function isPairingInfoLike(value: unknown): value is PairingInfo {
@@ -114,7 +102,6 @@ export default function PairingTestScreen() {
   const vibeLoopSoundRef = useRef<Audio.Sound | null>(null);
   /** 同じ measurementId の再送でカード詳細モーダルを繰り返さない */
   const shownAcquisitionModalFor = useRef(new Set<string>());
-  const hasHydratedAcquiredCards = useRef(false);
   const [completedResult, setCompletedResult] = useState<CompletedMeasurement | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -125,7 +112,10 @@ export default function PairingTestScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isBadPosture, setIsBadPosture] = useState(false);
   const hapticEnabled = true;
+  const collectionDeliveryReceived = useRef(false);
   const [acquiredCards, setAcquiredCards] = useState<AcquiredCharacterPayload[]>([]);
+  const [detailPresentation, setDetailPresentation] = useState<"acquisition" | "collection">("acquisition");
+  const DetailModal = detailPresentation === "collection" ? CharacterInfoModal : AcquisitionResultModal;
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [detailModalPayload, setDetailModalPayload] = useState<AcquiredCharacterPayload | null>(
     null,
@@ -335,26 +325,16 @@ export default function PairingTestScreen() {
   useEffect(() => {
     async function hydrateAcquiredCards() {
       try {
-        const raw = await AsyncStorage.getItem(ACQUIRED_CARDS_STORAGE_KEY);
+        const restored = await readAcquiredCards();
         const results = await readMeasurementResults();
         const latest = results.reduce<CompletedMeasurement | null>((best, result) => !best || result.endedAt > best.endedAt ? result : best, null);
         setCompletedResult(current => current && (!latest || current.endedAt >= latest.endedAt) ? current : latest);
-        const legacy = raw ? JSON.parse(raw) : [];
-        const parsed = [...(Array.isArray(legacy) ? legacy : []), ...results.flatMap(result => result.character ? [result.character] : [])];
-        if (!Array.isArray(parsed)) {
-          return;
-        }
-        const restored = parsed
-          .filter(isAcquiredCharacterPayloadLike)
-          .map((card) => ({
-            ...card,
-            characterId: normalizeCharacterId(card.characterId),
-          }));
         const unique = new Map<string, AcquiredCharacterPayload>();
         for (const card of restored.sort((a, b) => a.acquiredAt.localeCompare(b.acquiredAt))) {
           unique.set(card.characterId, card);
           shownAcquisitionModalFor.current.add(card.measurementId);
         }
+        if (collectionDeliveryReceived.current) return;
         setAcquiredCards(current => {
           for (const card of current) {
             const previous = unique.get(card.characterId);
@@ -364,8 +344,6 @@ export default function PairingTestScreen() {
         });
       } catch (storageError) {
         console.warn("failed to restore acquired cards", storageError);
-      } finally {
-        hasHydratedAcquiredCards.current = true;
       }
     }
 
@@ -438,13 +416,7 @@ export default function PairingTestScreen() {
     if (lastSocketEvent?.type === "posture_good") {
       setIsBadPosture(false);
     }
-    if (lastSocketEvent?.type === "acquired_characters_cleared") {
-      setAcquiredCards([]);
-      shownAcquisitionModalFor.current.clear();
-      setDetailModalPayload(null);
-      setDetailModalVisible(false);
-      void AsyncStorage.removeItem(ACQUIRED_CARDS_STORAGE_KEY);
-    }
+
   }, [lastSocketEvent]);
 
   // 日本語: PC がセッション終了（切断・ペア解除）したらモバイルもホーム相当へ戻す
@@ -489,10 +461,17 @@ export default function PairingTestScreen() {
     if (!lastAcquiredDispatch) {
       return;
     }
+    collectionDeliveryReceived.current = true;
     const payload = lastAcquiredDispatch.payload;
     setAcquiredCards(lastAcquiredDispatch.cards);
+    if (!payload) {
+      setDetailModalPayload(null);
+      setDetailModalVisible(false);
+      return;
+    }
     if (!shownAcquisitionModalFor.current.has(payload.measurementId)) {
       shownAcquisitionModalFor.current.add(payload.measurementId);
+      setDetailPresentation("acquisition");
       setDetailModalPayload(payload);
       setDetailModalVisible(true);
     }
@@ -807,7 +786,7 @@ export default function PairingTestScreen() {
             </ScrollView>
           </View>
         </View>
-        <AcquisitionResultModal
+        <DetailModal
           visible={detailModalVisible}
           payload={detailModalPayload}
           onClose={closeDetailModal}
@@ -911,7 +890,7 @@ export default function PairingTestScreen() {
             </ScrollView>
           </LinearGradient>
         </View>
-        <AcquisitionResultModal
+        <DetailModal
           visible={detailModalVisible}
           payload={detailModalPayload}
           onClose={closeDetailModal}
@@ -1020,7 +999,7 @@ export default function PairingTestScreen() {
             </ScrollView>
           </LinearGradient>
         </View>
-        <AcquisitionResultModal
+        <DetailModal
           visible={detailModalVisible}
           payload={detailModalPayload}
           onClose={closeDetailModal}
@@ -1223,6 +1202,7 @@ export default function PairingTestScreen() {
                   onPressAcquired={
                     acquiredPayload
                       ? () => {
+                          setDetailPresentation("collection");
                           setDetailModalPayload(acquiredPayload);
                           setDetailModalVisible(true);
                         }
@@ -1294,7 +1274,7 @@ export default function PairingTestScreen() {
       ) : null}
 
     </View>
-    <AcquisitionResultModal
+    <DetailModal
       visible={detailModalVisible}
       payload={detailModalPayload}
       onClose={closeDetailModal}

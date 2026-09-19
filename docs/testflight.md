@@ -192,3 +192,17 @@ npx --yes eas-cli@latest submit --platform ios --profile production --id <방금
 - 기존 EAS 인증서/API 키 재사용 확인. EAS Submit이 `Team (Expo)` TestFlight 그룹을 생성했다. 테스터 추가 및 실제 설치는 아직 확인하지 않았다.
 - App Store Connect의 내부 `Team (Expo)` 그룹에 `nanmi987@icloud.com` 계정을 추가했다. 2026-09-19 기준 상태는 `초대됨`, 그룹은 테스터 1명·빌드 2개다. iPhone에서 초대 수락, 빌드 3 설치 및 실행은 아직 실기기 확인 전이다.
 - 연동 수정이 포함된 posture-app은 [v0.1.3](https://github.com/vyuma/posture-app/releases/tag/v0.1.3)으로 배포했다. Universal DMG와 자동 업데이트 파일 모두 Developer ID 서명·Apple 공증·공개 다운로드 검증을 완료했다.
+
+
+## 사용자 실기기 확인 업데이트 — 2026-09-19
+
+사용자가 이번 대화에서 다음 두 결과를 직접 확인했다고 보고했다.
+
+- iPhone 잠금 해제 후 앱에 복귀하면 PC의 측정 종료 상태와 결과가 정상 표시됨.
+- 앱을 나갔다 다시 들어와도 획득 캐릭터가 보존됨.
+
+이 보고는 위 표의 해당 동작에 대한 사용자 확인으로 반영한다. iPhone 모델·iOS 버전·실제 설치 빌드 번호와 앱 재진입 방식(단순 복귀/강제 종료)은 별도로 제공되지 않았다. Wi-Fi 단절, PC 재시작, 늦은 이전 결과와 새 측정의 동시 처리, 기본 카메라 링크, 이번 UI 수정의 실기기 동작까지 확인됐다는 뜻은 아니다.
+
+## コレクションリセット修正
+
+PC 0.1.4とモバイル両方の更新が必要。削除IDの永続化・ACK・再接続・旧結果再生対策と実機手順は [collection-reset.md](collection-reset.md) を参照。TestFlight (4) にはこの修正は含まれない。

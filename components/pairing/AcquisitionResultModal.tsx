@@ -9,9 +9,11 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
 import { CharacterResultCard } from "@/components/pairing/CharacterResultCard";
@@ -22,7 +24,8 @@ const DESIGN_HEIGHT = 844;
 const MAX_LAYOUT_WIDTH = 456;
 
 const LOGO_WHITE_IMAGE = require("@/assets/images/logo_white.png");
-const SHARE_IMAGE = require("@/assets/images/share.png");
+// Figma プロトタイプ / 獲得 / 共有 (580:7110), original 40×40 export.
+const SHARE_IMAGE = require("@/assets/images/acquisition-share.svg");
 
 const PORTRAIT_TUNE = {
   widthRatio: 0.55,
@@ -38,19 +41,22 @@ export type AcquisitionResultModalProps = {
   onClose: () => void;
 };
 
-/** Figma `モバイル/獲得`。ホームの取得済みカードから開く場合も同じ画面を使う。 */
+/** 新規獲得時の全画面表示。保存済みカードの閲覧にはCharacterInfoModalを使う。 */
 export function AcquisitionResultModal({
   visible,
   payload,
   onClose,
 }: AcquisitionResultModalProps) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const captureTargetRef = useRef<View>(null);
   const layoutWidth = Math.min(width, MAX_LAYOUT_WIDTH);
   const scale = layoutWidth / DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
   const cardWidth = Math.min(s(310), layoutWidth - s(32));
   const contentMinHeight = Math.max(height, s(DESIGN_HEIGHT));
+  const headerTop = Math.max(s(60), insets.top + 8);
+  const cardTop = Math.max(s(140), headerTop + s(80));
 
   const shareCard = useCallback(async () => {
     if (!captureTargetRef.current) {
@@ -91,7 +97,7 @@ export function AcquisitionResultModal({
           style={styles.scroll}
           contentContainerStyle={[styles.content, { minHeight: contentMinHeight }]}
           showsVerticalScrollIndicator={false}>
-          <View style={[styles.canvas, { width: layoutWidth, minHeight: contentMinHeight }]}>
+          <View style={[styles.canvas, { width: layoutWidth, minHeight: contentMinHeight, paddingBottom: Math.max(insets.bottom, 24) }]}>
             <Pressable
               onPress={onClose}
               accessibilityRole="button"
@@ -100,7 +106,7 @@ export function AcquisitionResultModal({
               style={{
                 position: "absolute",
                 left: (layoutWidth - s(80)) / 2,
-                top: s(60),
+                top: headerTop,
                 width: s(80),
                 height: s(48),
               }}>
@@ -108,15 +114,27 @@ export function AcquisitionResultModal({
             </Pressable>
 
             <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="戻る"
+              style={({ pressed }) => [
+                styles.backButton,
+                { left: s(24), top: headerTop, minHeight: 44 },
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.backLabel}>戻る</Text>
+            </Pressable>
+
+            <Pressable
               onPress={() => void shareCard()}
               accessibilityRole="button"
               accessibilityLabel="カード画像を共有"
-              hitSlop={10}
+              hitSlop={Math.max(2, (44 - s(40)) / 2)}
               style={({ pressed }) => [
                 styles.shareButton,
                 {
-                  right: s(24),
-                  top: s(60),
+                  right: s(40),
+                  top: headerTop + s(2),
                   width: s(40),
                   height: s(40),
                   borderRadius: s(20),
@@ -125,7 +143,7 @@ export function AcquisitionResultModal({
               ]}>
               <Image
                 source={SHARE_IMAGE}
-                style={{ width: s(20), height: s(20) }}
+                style={{ width: s(40), height: s(40) }}
                 contentFit="contain"
               />
             </Pressable>
@@ -135,7 +153,7 @@ export function AcquisitionResultModal({
               collapsable={false}
               style={{
                 width: cardWidth,
-                marginTop: s(140),
+                marginTop: cardTop,
                 alignSelf: "center",
               }}>
               <CharacterResultCard
@@ -151,6 +169,17 @@ export function AcquisitionResultModal({
                 }}
               />
             </View>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="ホームに戻る"
+              style={({ pressed }) => [
+                styles.homeButton,
+                { width: cardWidth, marginTop: s(24), marginBottom: 24 },
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.homeLabel}>ホームに戻る</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </View>
@@ -181,7 +210,34 @@ const styles = StyleSheet.create({
     zIndex: 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.24)",
+
+  },
+  backButton: {
+    position: "absolute",
+    zIndex: 2,
+    minWidth: 44,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  backLabel: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  homeButton: {
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    backgroundColor: "#ffffff",
+  },
+  homeLabel: {
+    color: "#16758f",
+    fontSize: 16,
+    fontWeight: "700",
   },
   pressed: {
     opacity: 0.7,
