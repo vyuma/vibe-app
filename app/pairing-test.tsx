@@ -874,23 +874,33 @@ export default function PairingTestScreen() {
                     },
                   ]}>
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureTitle,
                       {
                         top: registerTitleTop,
                         fontSize: registerTitleFont,
                         lineHeight: registerTitleLine,
+                        height: registerTitleLine,
+                        left: sx(32),
+                        right: sx(32),
                       },
                     ]}>
                     良い姿勢を登録中
                   </Text>
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureSubtitle,
                       {
                         top: registerSubtitleTop,
                         fontSize: registerSubtitleFont,
                         lineHeight: registerSubtitleLine,
+                        height: registerSubtitleLine,
+                        left: sx(32),
+                        right: sx(32),
                       },
                     ]}>
                     PCで姿勢登録をしてください
@@ -968,23 +978,33 @@ export default function PairingTestScreen() {
                   },
                 ]}>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.measureTitle,
                     {
                       top: registerTitleTop,
                       fontSize: registerTitleFont,
                       lineHeight: registerTitleLine,
+                      height: registerTitleLine,
+                      left: sx(32),
+                      right: sx(32),
                     },
                   ]}>
                   姿勢測定中
                 </Text>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.registerPostureSubtitle,
                     {
                       top: registerSubtitleTop,
                       fontSize: registerSubtitleFont,
                       lineHeight: registerSubtitleLine,
+                      height: registerSubtitleLine,
+                      left: sx(32),
+                      right: sx(32),
                     },
                   ]}>
                   スマホの画面を閉じないでください
@@ -1586,7 +1606,6 @@ const styles = StyleSheet.create({
   },
   measureTitle: {
     position: "absolute",
-    width: "100%",
     textAlign: "center",
     fontSize: px(32),
     lineHeight: px(38),
