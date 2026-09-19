@@ -2,6 +2,12 @@
   "expo": {
     "name": "vibe-app",
     "slug": "vibe-app",
+    "owner": "kyoung9",
+    "extra": {
+      "eas": {
+        "projectId": "185f4a2a-d1d7-402b-86e4-e27c16de7d84"
+      }
+    },
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,9 +15,27 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.kyoungpin.piiin",
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "QR 코드로 페어링 링크를 스캔하기 위해 카메라를 사용합니다."
+        "NSCameraUsageDescription": "QR 코드로 페어링 링크를 스캔하기 위해 카메라를 사용합니다.",
+        "NSLocalNetworkUsageDescription": "같은 네트워크의 PC 앱에 연결하여 자세 상태와 캐릭터 획득 결과를 받습니다.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "10.0.0.0/8": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            },
+            "172.16.0.0/12": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            },
+            "192.168.0.0/16": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -44,6 +68,14 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "QR 코드로 페어링 링크를 스캔하기 위해 카메라를 사용합니다.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ]
     ],

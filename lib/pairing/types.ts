@@ -15,6 +15,7 @@ export type PairErrorCode =
 
 export type PairingSocketEvent = {
   type:
+    | "measurement_completed"
     | "snapshot"
     | "paired"
     | "disconnected"
@@ -35,6 +36,9 @@ export type PairingSocketEvent = {
   measuringSessionActive?: boolean;
   /** PC で「良い姿勢」の登録・キャリブレーション中のとき true（スナップショット等に含めてもよい） */
   goodPostureRegistrationActive?: boolean;
+  isBadPosture?: boolean;
+  measurementId?: string | null;
+  result?: CompletedMeasurement;
   eventId?: string;
   requiresAck?: boolean;
   payload?: AcquiredCharacterPayload;
@@ -86,4 +90,12 @@ export type ErrorResponse = {
   ok: false;
   errorCode: PairErrorCode;
   message: string;
+};
+
+export type CompletedMeasurement = {
+  id: string; sourceId: string; startedAt: string; endedAt: string;
+  activeMeasurementMs: number; goodMs: number; goodRatio: number;
+  rewardQualified: boolean; acquiredCharacterId: string | null;
+  postureTimeline: PostureTimelineSegmentPayload[];
+  character?: AcquiredCharacterPayload | null;
 };

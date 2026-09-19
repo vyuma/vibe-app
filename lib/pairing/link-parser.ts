@@ -20,7 +20,7 @@ export function parsePairingLink(rawLink: string): PairingLinkParseResult {
   try {
     const url = new URL(trimmed);
 
-    if (url.protocol === "vibeapp:") {
+    if (url.protocol === "vibeapp:" && (url.hostname === "pair" || url.pathname === "/pair")) {
       const host = url.searchParams.get("host");
       const port = url.searchParams.get("port");
       const token = url.searchParams.get("token");
@@ -32,9 +32,9 @@ export function parsePairingLink(rawLink: string): PairingLinkParseResult {
         return { ok: false, reason: "ペアリングURLの必須パラメータが不足しています。" };
       }
 
-      const parsedPort = Number.parseInt(port, 10);
+      const parsedPort = Number(port);
 
-      if (Number.isNaN(parsedPort)) {
+      if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
         return { ok: false, reason: "port の形式が不正です。" };
       }
 
