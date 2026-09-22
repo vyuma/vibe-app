@@ -87,3 +87,31 @@ test('PC reset persists before local deletion, replays after restart, and preser
     assert.deepEqual(reloaded.readCollectionReset().measurementIds.sort(), ['legacy', 'new', 'old']);
   } finally { global.localStorage = previous; global.window = previousWindow; }
 });
+
+test('all 17 characters unlock in order and have a mobile portrait (no fallback)', () => {
+  const ids = load('lib/normalizeCharacterId.ts');
+  const mobile = load('lib/characterCatalog.ts', { '@/lib/normalizeCharacterId': ids });
+  const desktop = load(path.join(pc, 'src/features/characters/characterCatalog.ts'));
+  const catalog = desktop.CHARACTER_CATALOG;
+  assert.equal(catalog.length, 17);
+  assert.equal(new Set(catalog.map(c => c.id)).size, 17);
+  const bundled = Object.fromEntries(catalog.map(c => [`../assets/characters/${c.id}/portrait.png`, c.id]));
+  const portraits = load('lib/resolveCharacterPortrait.ts', { ...bundled, '@/lib/normalizeCharacterId': ids });
+  const acquired = new Set(['normal-nago', 'shin-anago', 'kuro-anyago', 'hat-anago', 'oto-anago', 'dot-nago', 'moja-anago']);
+  for (const character of catalog.slice(7)) {
+    assert.equal(desktop.getNextUnacquiredCharacter(acquired).id, character.id);
+    assert.equal(portraits.resolveCharacterPortraitSource(character.id), character.id);
+    acquired.add(character.id);
+  }
+  assert.equal(desktop.getNextUnacquiredCharacter(acquired), null);
+  assert.equal(mobile.getCatalogEntryAtSlotIndex(16).id, 'ryuu-anago');
+  assert.equal(mobile.getCatalogEntryAtSlotIndex(17), null);
+  assert.equal(mobile.getCatalogEntryAtSlotIndex(110), null);
+  const aliases = { 'nasu-anago': 'nasubi-nago', 'rabu-anago': 'twin-nago', 'mimi-anago': 'wan-anago', 'aka-anago': 'koi-anago', 'hoshi-anago': 'yozora-nago', 'futaba-anago': 'futaba-nago', 'caramel-anago': 'pan-nago' };
+  const desktopIds = load(path.join(pc, 'src/features/characters/characterIds.ts'));
+  for (const [old, current] of Object.entries(aliases)) {
+    assert.equal(ids.normalizeCharacterId(old), current);
+    assert.equal(desktopIds.normalizeCharacterId(old), current);
+    assert.equal(portraits.resolveCharacterPortraitSource(old), current);
+  }
+});
