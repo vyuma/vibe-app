@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { CharacterCatalogEntry } from "@/lib/characterCatalog";
 import type { AcquiredCharacterPayload } from "@/lib/pairing/types";
 import { resolveCharacterPortraitSource } from "@/lib/resolveCharacterPortrait";
+import { CharacterStars } from "./CharacterStars";
 
 /**
  * ホーム・習得スロットカード内のキャラ画像：このオブジェクトを編集して位置・大きさを調整する。
@@ -83,7 +84,7 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
   const { previewSide, previewRadius, contentInset } = useMemo(() => {
     const w = width;
     const h = height;
-    const metaReserve = Math.max(56, h * 0.3);
+    const metaReserve = Math.max(72, h * 0.3);
     const defaultInset = w * 0.05;
     const minInsetForHeight = w + metaReserve - h;
     let inset = Math.max(defaultInset, minInsetForHeight);
@@ -187,6 +188,7 @@ export const CollectionSlotCard = memo(function CollectionSlotCard({
             ellipsizeMode="tail">
             {character.name}
           </Text>
+          <CharacterStars characterId={character.id} size={10} />
           <View style={styles.tagsRow}>
             {tags.map((tag, index) => (
               <View

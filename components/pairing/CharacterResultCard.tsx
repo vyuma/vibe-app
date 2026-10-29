@@ -20,6 +20,7 @@ import {
   formatPercent,
 } from "@/lib/formatMeasurement";
 import { getCatalogEntryByCharacterId } from "@/lib/characterCatalog";
+import { CharacterStars } from "./CharacterStars";
 import type { AcquiredCharacterPayload } from "@/lib/pairing/types";
 import { resolveCharacterPortraitSource } from "@/lib/resolveCharacterPortrait";
 
@@ -241,6 +242,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
             ]}>
             {payload.characterName}
           </Text>
+          <CharacterStars characterId={payload.characterId} size={16 * detailContentScale} />
 
           <View
             style={[
@@ -430,7 +432,7 @@ export const CharacterResultCard = memo(function CharacterResultCard({
         </View>
 
         <View style={styles.nameRow}>
-          <Text style={styles.characterName}>{payload.characterName}</Text>
+          <View style={{ flex: 1 }}><Text style={styles.characterName}>{payload.characterName}</Text><CharacterStars characterId={payload.characterId} /></View>
           <Pressable
             onPress={() => void handleShare()}
             accessibilityRole="button"
