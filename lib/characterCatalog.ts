@@ -1,8 +1,11 @@
+import additions from './characterAdditions.json';
 import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
 
 /** PC の `CharacterDefinition` に対応（モバイル表示用の最小フィールド） */
 export type CharacterCatalogEntry = {
   id: string;
+  number: number;
+  stars: number;
   name: string;
   rarity: "common" | "rare" | "epic";
   story: string;
@@ -15,6 +18,8 @@ export type CharacterCatalogEntry = {
 export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   {
     id: "normal-nago",
+    number: 1,
+    stars: 1,
     name: "シマアナゴ",
     rarity: "common",
     story: "いつもそばで姿勢を見守ってくれる、基本のピンアナゴ。",
@@ -27,6 +32,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "shin-anago",
+    number: 2,
+    stars: 1,
     name: "シン・アナゴ",
     rarity: "common",
     story: "姿勢のいい時間にひょっこり現れる、まっすぐなピンアナゴ。",
@@ -39,6 +46,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "kuro-anyago",
+    number: 3,
+    stars: 1,
     name: "クロアニャゴ",
     rarity: "common",
     story: "集中している人のそばが好きな、落ち着いた黒いピンアナゴ。",
@@ -51,6 +60,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "dot-nago",
+    number: 4,
+    stars: 1,
     name: "クマアナゴ",
     rarity: "rare",
     story: "ドット模様と一緒に、集中のリズムを刻むピンアナゴ。",
@@ -63,6 +74,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "moja-anago",
+    number: 5,
+    stars: 1,
     name: "モジャアナゴ",
     rarity: "epic",
     story: "良い姿勢を続ける人にだけ姿を見せる、もじゃもじゃ不思議なピンアナゴ。",
@@ -75,6 +88,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "oto-anago",
+    number: 6,
+    stars: 1,
     name: "オトアナゴ",
     rarity: "common",
     story: "良い姿勢のリズムに合わせてゆらゆらする白いピンアナゴ。",
@@ -87,6 +102,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "hat-anago",
+    number: 7,
+    stars: 1,
     name: "ハットナゴ",
     rarity: "rare",
     story: "休憩と集中の切り替えが上手な、おしゃれ好きのピンアナゴ。",
@@ -99,6 +116,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "nasubi-nago",
+    number: 8,
+    stars: 1,
     name: "ナスビナゴ",
     rarity: "common",
     story: "なすびの冠を戴き、落ち着いた集中のそばにひょっこり顔を出すピンアナゴ。",
@@ -111,6 +130,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "twin-nago",
+    number: 9,
+    stars: 1,
     name: "ツインナゴ",
     rarity: "rare",
     story: "ハート模様とツインテールで、華やかな姿勢タイムを盛り上げるピンアナゴ。",
@@ -123,6 +144,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "nami-anago",
+    number: 10,
+    stars: 1,
     name: "ナミアナゴ",
     rarity: "common",
     story: "波線がゆらゆら流れ、リズムのいい姿勢を一緒に刻むピンアナゴ。",
@@ -135,6 +158,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "futaba-nago",
+    number: 11,
+    stars: 1,
     name: "フタバナゴ",
     rarity: "common",
     story: "双葉を乗せてすくすく伸びる、まっすぐな背筋が似合うピンアナゴ。",
@@ -147,6 +172,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "pan-nago",
+    number: 12,
+    stars: 1,
     name: "パンアナゴ",
     rarity: "common",
     story: "パンみたいな温かい質感で、長い集中もそっと支えるピンアナゴ。",
@@ -159,6 +186,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "yozora-nago",
+    number: 13,
+    stars: 1,
     name: "ヨゾラナゴ",
     rarity: "epic",
     story: "星屑をまとった夜の色で、静かな集中のそばにいるピンアナゴ。",
@@ -171,6 +200,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "koi-anago",
+    number: 14,
+    stars: 1,
     name: "コイアナゴ",
     rarity: "rare",
     story: "うろこ模様をきらめかせながら、自分のペースで良い姿勢を目指すピンアナゴ。",
@@ -183,6 +214,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "pain-nago",
+    number: 15,
+    stars: 1,
     name: "パインナゴ",
     rarity: "rare",
     story: "パイナップル柄のリズムで、楽しい姿勢の時間を運んでくるピンアナゴ。",
@@ -195,6 +228,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "wan-anago",
+    number: 16,
+    stars: 1,
     name: "ワンアナゴ",
     rarity: "common",
     story: "耳をぴんと立てて、あなたのそばで甘えん坊なピンアナゴ。",
@@ -207,6 +242,8 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
   },
   {
     id: "ryuu-anago",
+    number: 17,
+    stars: 1,
     name: "リュウアナゴ",
     rarity: "rare",
     story: "水滴の模様が揺れるたび、集中の深さを静かに見守るピンアナゴ。",
@@ -217,11 +254,12 @@ export const CHARACTER_CATALOG: CharacterCatalogEntry[] = [
     },
     personalityTags: ["ミステリアス", "プライドが高い"],
   },
+  ...additions.map(({ presentation: _presentation, ...entry }) => ({ ...entry, rarity: entry.rarity as CharacterCatalogEntry["rarity"] })),
 ];
 
 /** スロット index（0 始まり）に対応するカタログ行。未実装のスロットは null。 */
 export function getCatalogEntryAtSlotIndex(slotIndex: number): CharacterCatalogEntry | null {
-  const entry = CHARACTER_CATALOG[slotIndex];
+  const entry = CHARACTER_CATALOG.find(item => item.number === slotIndex + 1);
   return entry ?? null;
 }
 

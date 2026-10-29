@@ -9,7 +9,7 @@ const pc = process.env.POSTURE_APP_DIR || path.resolve('../posture-app');
 function load(file, mocks = {}) {
   const module = { exports: {} };
   const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInThisContext(`(function(require,module,exports){${js}})`, { filename: file })(name => mocks[name], module, module.exports);
+  vm.runInThisContext(`(function(require,module,exports){${js}})`, { filename: file })(name => name.endsWith(".json") ? { default: JSON.parse(fs.readFileSync(path.resolve(path.dirname(file), name), "utf8")) } : mocks[name], module, module.exports);
   return module.exports;
 }
 test('PC/mobile canonical catalog, legacy IDs, and portrait bytes match', () => {
@@ -88,13 +88,13 @@ test('PC reset persists before local deletion, replays after restart, and preser
   } finally { global.localStorage = previous; global.window = previousWindow; }
 });
 
-test('all 17 characters unlock in order and have a mobile portrait (no fallback)', () => {
+test('all 20 characters unlock in order and have a mobile portrait (no fallback)', () => {
   const ids = load('lib/normalizeCharacterId.ts');
   const mobile = load('lib/characterCatalog.ts', { '@/lib/normalizeCharacterId': ids });
   const desktop = load(path.join(pc, 'src/features/characters/characterCatalog.ts'));
   const catalog = desktop.CHARACTER_CATALOG;
-  assert.equal(catalog.length, 17);
-  assert.equal(new Set(catalog.map(c => c.id)).size, 17);
+  assert.equal(catalog.length, 20);
+  assert.equal(new Set(catalog.map(c => c.id)).size, 20);
   const bundled = Object.fromEntries(catalog.map(c => [`../assets/characters/${c.id}/portrait.png`, c.id]));
   const portraits = load('lib/resolveCharacterPortrait.ts', { ...bundled, '@/lib/normalizeCharacterId': ids });
   const acquired = new Set(['normal-nago', 'shin-anago', 'kuro-anyago', 'hat-anago', 'oto-anago', 'dot-nago', 'moja-anago']);

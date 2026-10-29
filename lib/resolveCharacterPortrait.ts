@@ -3,6 +3,10 @@ import { normalizeCharacterId } from "@/lib/normalizeCharacterId";
 
 /** PC の public/characters と同じ id → バンドル済み portrait */
 const CHARACTER_PORTRAITS: Record<string, ImageSourcePropType> = {
+  "sakura-nago": require("../assets/characters/sakura-nago/portrait.png"),
+  "miira-nago": require("../assets/characters/miira-nago/portrait.png"),
+  "king-nago": require("../assets/characters/king-nago/portrait.png"),
+
   "normal-nago": require("../assets/characters/normal-nago/portrait.png"),
   "shin-anago": require("../assets/characters/shin-anago/portrait.png"),
   "kuro-anyago": require("../assets/characters/kuro-anyago/portrait.png"),
