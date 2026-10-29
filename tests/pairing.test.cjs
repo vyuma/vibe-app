@@ -30,7 +30,8 @@ test('pairing intent routes cold and warm launches; invalid port rejected', () =
   assert.equal(parsePairingLink(link.replace('4321', '0')).ok, false);
   assert.equal(parsePairingLink(link.replace('4321', '4321oops')).ok, false);
 });
-test('receipt is ACKed only after durable save; retries deduplicate; storage failure stays unacked', async () => {
+for (const characterId of ['normal-nago', 'nasubi-nago', 'twin-nago', 'nami-anago', 'futaba-nago', 'pan-nago', 'yozora-nago', 'koi-anago', 'pain-nago', 'wan-anago', 'ryuu-anago'])
+test(`receipt ${characterId}: durable save before ACK, deduplicate retries, no ACK on failure`, async () => {
   let saved = null, release, fail = false;
   const storage = {
     getItem: async key => key === "PAIRING_ACQUIRED_CARDS_V1" ? saved : null,
@@ -56,13 +57,14 @@ test('receipt is ACKed only after durable save; retries deduplicate; storage fai
   try {
     await session.startPairing({ host: '192.168.1.2', port: 1234, token: 'test', httpProtocol: 'http', wsProtocol: 'ws' });
     session.startSocket();
-    const payload = { measurementId: 'm1', characterId: 'normal-nago', characterName: 'test', rarity: 'common', acquiredAt: '2026-09-19' };
+    const payload = { measurementId: 'm1', characterId, characterName: 'test', rarity: 'common', acquiredAt: '2026-09-19' };
     const event = { type: 'acquired_character', eventId: 'evt1', sequence: 1, requiresAck: true, payload };
     socket.onmessage({ data: JSON.stringify(event) }); await settle();
     assert.equal(socket.sent.length, 0);
     release(); await settle();
     assert.equal(socket.sent[0].type, 'ack_event');
     assert.equal(socket.sent[0].status, 'stored');
+    assert.equal(JSON.parse(saved)[0].characterId, characterId);
     socket.onmessage({ data: JSON.stringify(event) }); await settle();
     assert.equal(socket.sent.length, 2); assert.equal(JSON.parse(saved).length, 1);
     fail = true;

@@ -104,6 +104,8 @@ export default function PairingTestScreen() {
   const shownAcquisitionModalFor = useRef(new Set<string>());
   const [completedResult, setCompletedResult] = useState<CompletedMeasurement | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [qrButtonMeasuredHeight, setQrButtonMeasuredHeight] = useState(0);
+  const [qrHintMeasuredHeight, setQrHintMeasuredHeight] = useState(0);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [visibleCollectionCount, setVisibleCollectionCount] = useState(COLLECTION_PAGE_SIZE);
   const [hasScanned, setHasScanned] = useState(false);
@@ -169,7 +171,6 @@ export default function PairingTestScreen() {
   const sx = useCallback((value: number) => value * layoutScale, [layoutScale]);
   // Figma `モバイル/ホーム` 390x844 の実測値。狭い端末は同じ比率で縮小し、
   // タブレットと横向きでは 456px の中央カラムに収める。
-  const heroHeight = sx(378);
   const logoWidth = sx(80);
   const logoHeight = sx(48);
   const heroLogoTop = sx(60);
@@ -181,12 +182,17 @@ export default function PairingTestScreen() {
   const qrButtonRadius = sx(100);
   const qrButtonLabelFont = sx(16);
   const qrButtonLabelLine = sx(19);
-  const heroQrHintTop = sx(227);
+  const heroQrHintTop = Math.max(sx(227), heroQrTop + qrButtonMeasuredHeight + sx(16));
+  const heroHeight = Math.max(
+    sx(378),
+    heroQrHintTop + Math.max(sx(48), qrHintMeasuredHeight) + sx(103),
+  );
   const heroQrHintFont = sx(12);
   const heroQrHintLine = sx(24);
   const anagoWidth = sx(147);
   const anagoHeight = sx(236);
-  const heroAnagoTop = sx(125);
+  // Frame 43 の下端を基準にして、胴体をコレクションの背面まで伸ばす。
+  const heroAnagoBottom = sx(17);
   const anagoRight = sx(17);
   const contentMinHeight = Math.max(height - insets.top, sx(DESIGN_HEIGHT));
   const collectionPaddingHorizontal = sx(33);
@@ -194,14 +200,13 @@ export default function PairingTestScreen() {
   const collectionPaddingBottom = sx(40);
   // Frame 42: y=329。Frame 43 の高さ 378 に 49px 重なる。
   const collectionMarginTop = -sx(49);
-  const collectionRadius = sx(28);
+  const collectionRadius = sx(32);
   const collectionHeaderBottom = sx(8);
   const collectionLabelFont = sx(16);
   const collectionLabelLine = sx(19);
   const collectionCountFont = sx(32);
   const collectionCountLine = sx(38);
   const collectionSubFont = sx(16);
-  const collectionSubLine = sx(19);
   const collectionGap = sx(18.56);
   const collectionCardWidth =
     (layoutWidth - collectionPaddingHorizontal * 2 - collectionGap) / 2;
@@ -233,10 +238,8 @@ export default function PairingTestScreen() {
   const registerTitleTop = registerCardSize * (32 / 320);
   const registerSubtitleFont = sx(16);
   const registerSubtitleLine = sx(19);
-  const registerSubtitleTop = registerCardSize * (85 / 320);
   const registerAnagoWidth = registerCardSize * (168 / 320);
   const registerAnagoHeight = registerCardSize * (270 / 320);
-  const registerAnagoTop = registerCardSize * (116 / 320);
   const registerAnagoLeft = (registerCardSize - registerAnagoWidth) / 2;
   // 日本語: 測定 UI は HTTP ペア済みかつ WS 接続中かつ PC 側が measuring のときのみ（切断時に古い状態で残さない）
   const isMeasuring = isConnected && isSocketConnected && measuringSessionActive;
@@ -835,8 +838,8 @@ export default function PairingTestScreen() {
                 style={[
                   styles.registerCardOuter,
                   {
-                    position: "absolute",
-                    top: measureCardTop,
+                    marginTop: measureCardTop,
+                    marginBottom: sx(32) + insets.bottom,
                     width: registerCardSize,
                     borderRadius: registerCardRadius,
                     shadowRadius: sx(8.52),
@@ -847,43 +850,51 @@ export default function PairingTestScreen() {
                     styles.registerCardInner,
                     {
                       width: registerCardSize,
-                      height: registerCardSize,
+                      minHeight: registerCardSize,
                       borderRadius: registerCardRadius,
                     },
                   ]}>
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureTitle,
                       {
-                        top: registerTitleTop,
+                        marginTop: registerTitleTop,
                         fontSize: registerTitleFont,
                         lineHeight: registerTitleLine,
+                        marginHorizontal: sx(32),
                       },
                     ]}>
                     良い姿勢を登録中
                   </Text>
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.registerPostureSubtitle,
                       {
-                        top: registerSubtitleTop,
+                        marginTop: sx(24),
                         fontSize: registerSubtitleFont,
                         lineHeight: registerSubtitleLine,
+                        marginHorizontal: sx(32),
                       },
                     ]}>
                     PCで姿勢登録をしてください
                   </Text>
+                  <View style={{ height: sx(204), marginTop: sx(12), overflow: "hidden" }}>
                   <Image
                     source={GOOD_POSTURE_REGISTER_CHARACTER_IMAGE}
                     style={{
                       position: "absolute",
                       left: registerAnagoLeft,
-                      top: registerAnagoTop,
+                      top: 0,
                       width: registerAnagoWidth,
                       height: registerAnagoHeight,
                     }}
                     contentFit="contain"
                   />
+                  </View>
                 </View>
               </View>
               </View>
@@ -938,41 +949,48 @@ export default function PairingTestScreen() {
                 style={[
                   styles.measureCard,
                   {
-                    position: "absolute",
-                    top: measureCardTop,
+                    marginTop: measureCardTop,
+                    marginBottom: sx(32) + insets.bottom,
                     width: measureCardSize,
-                    height: measureCardSize,
+                    minHeight: measureCardSize,
                     borderRadius: measureCardRadius,
                   },
                 ]}>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.measureTitle,
                     {
-                      top: registerTitleTop,
+                      marginTop: registerTitleTop,
                       fontSize: registerTitleFont,
                       lineHeight: registerTitleLine,
+                      marginHorizontal: sx(32),
                     },
                   ]}>
                   姿勢測定中
                 </Text>
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.registerPostureSubtitle,
                     {
-                      top: registerSubtitleTop,
+                      marginTop: sx(24),
                       fontSize: registerSubtitleFont,
                       lineHeight: registerSubtitleLine,
+                      marginHorizontal: sx(32),
                     },
                   ]}>
                   スマホの画面を閉じないでください
                 </Text>
+                <View style={{ height: sx(204), marginTop: sx(12), overflow: "hidden" }}>
                 <Animated.View
                   style={[
                     styles.measureAnago,
                     {
                       left: registerAnagoLeft,
-                      top: registerAnagoTop,
+                      top: 0,
                       width: registerAnagoWidth,
                       height: registerAnagoHeight,
                     },
@@ -994,6 +1012,7 @@ export default function PairingTestScreen() {
                   ) : null}
                   <Image source={ANAGO_IMAGE} style={styles.fill} contentFit="contain" />
                 </Animated.View>
+                </View>
               </View>
               </View>
             </ScrollView>
@@ -1019,7 +1038,7 @@ export default function PairingTestScreen() {
           alignSelf: "center",
         }}>
       <ScrollView contentContainerStyle={[styles.content, { minHeight: contentMinHeight }]}>
-        {/* 上部グラデーション帯（Figma Frame 43：高さ 346） */}
+        {/* 上部グラデーション帯（Figma Frame 43：高さ 378） */}
         <LinearGradient
           colors={["#34add5", "#e0e4c9"]}
           start={{ x: 0.5, y: 0 }}
@@ -1044,6 +1063,7 @@ export default function PairingTestScreen() {
           {/* QRスキャンボタン（Figma ボタン：179×51 / radius 100） */}
           <Pressable
             disabled={isPairing}
+            onLayout={(event) => setQrButtonMeasuredHeight(event.nativeEvent.layout.height)}
             onPress={() => void handleOpenScanner()}
             style={({ pressed }) => [
               styles.qrButton,
@@ -1051,7 +1071,9 @@ export default function PairingTestScreen() {
                 left: qrLeft,
                 top: heroQrTop,
                 width: qrButtonWidth,
-                height: qrButtonHeight,
+                minHeight: qrButtonHeight,
+                paddingVertical: sx(16),
+                paddingHorizontal: sx(20),
                 borderRadius: qrButtonRadius,
                 shadowRadius: sx(12),
                 shadowOffset: { width: 0, height: sx(6) },
@@ -1059,6 +1081,8 @@ export default function PairingTestScreen() {
               pressed && styles.qrButtonPressed,
             ]}>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.qrButtonLabel,
                 { fontSize: qrButtonLabelFont, lineHeight: qrButtonLabelLine },
@@ -1069,6 +1093,7 @@ export default function PairingTestScreen() {
 
           {/* 案内文（Figma：12px / lineHeight 24） */}
           <Text
+            onLayout={(event) => setQrHintMeasuredHeight(event.nativeEvent.layout.height)}
             style={[
               styles.qrHint,
               {
@@ -1082,14 +1107,14 @@ export default function PairingTestScreen() {
             PCに表示されているQRコードを{"\n"}読み取ってください
           </Text>
 
-          {/* 右側のアナゴ（Figma Frame 30：x=258 / 74×482） */}
+          {/* 右側のアナゴ（Figma 580:8059：x=226 / y=125 / 147×236） */}
           <Animated.View
             style={[
               styles.heroAnago,
               animatedStyles.anago,
               {
                 right: anagoRight,
-                top: heroAnagoTop,
+                bottom: heroAnagoBottom,
                 width: anagoWidth,
                 height: anagoHeight,
               },
@@ -1098,15 +1123,7 @@ export default function PairingTestScreen() {
           </Animated.View>
         </LinearGradient>
 
-        {completedResult && (
-          <View style={{ padding: 16, backgroundColor: "#ffffff" }} accessibilityLiveRegion="polite">
-            <Text style={{ fontWeight: "700" }}>前回の測定は終了しました</Text>
-            <Text>測定時間 {Math.round(completedResult.activeMeasurementMs / 1000)}秒・良い姿勢 {Math.round(completedResult.goodRatio * 100)}%</Text>
-            <Text>{completedResult.character ? `${completedResult.character.characterName}を獲得しました` : "今回のキャラクター獲得はありません"}</Text>
-          </View>
-        )}
-
-        {/* コレクションシート（Figma Frame 42：bg #FDFDFD / y=291） */}
+        {/* コレクションシート（Figma Frame 42：bg #FDFDFD / y=329） */}
         <View
           style={[
             styles.collectionSheet,
@@ -1117,6 +1134,7 @@ export default function PairingTestScreen() {
               marginTop: collectionMarginTop,
               borderTopLeftRadius: collectionRadius,
               borderTopRightRadius: collectionRadius,
+              boxShadow: `0px 0px ${sx(8.52)}px rgba(0, 0, 0, 0.15)`,
             },
           ]}>
           {/* ヘッダー：コレクション 0 / 111 */}
@@ -1134,38 +1152,20 @@ export default function PairingTestScreen() {
               コレクション
             </Text>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.collectionCount,
                 {
                   fontSize: collectionCountFont,
                   lineHeight: collectionCountLine,
-                  marginRight: sx(8),
+                  maxWidth: "100%",
                 },
               ]}>
               {acquiredCount}
-            </Text>
-            <Text
-              style={[
-                styles.collectionDivider,
-                {
-                  fontSize: collectionSubFont,
-                  lineHeight: collectionSubLine,
-                  marginRight: sx(5),
-                  paddingBottom: sx(2),
-                },
-              ]}>
-              /
-            </Text>
-            <Text
-              style={[
-                styles.collectionTotal,
-                {
-                  fontSize: collectionSubFont,
-                  lineHeight: collectionSubLine,
-                  paddingBottom: sx(2),
-                },
-              ]}>
-              {COLLECTION_TOTAL}
+              <Text style={{ fontSize: collectionSubFont, color: "#666666" }}>
+                {` / ${COLLECTION_TOTAL}`}
+              </Text>
             </Text>
           </View>
 
@@ -1233,6 +1233,15 @@ export default function PairingTestScreen() {
               </Text>
             </Pressable>
           ) : null}
+
+          {/* 終了案内でヒーローとシートの重なりを分断しない。 */}
+          {completedResult && (
+            <View style={{ marginTop: sx(16), gap: sx(4) }} accessibilityLiveRegion="polite">
+              <Text style={{ fontWeight: "700" }}>前回の測定は終了しました</Text>
+              <Text>測定時間 {Math.round(completedResult.activeMeasurementMs / 1000)}秒・良い姿勢 {Math.round(completedResult.goodRatio * 100)}%</Text>
+              <Text>{completedResult.character ? `${completedResult.character.characterName}を獲得しました` : "今回のキャラクター獲得はありません"}</Text>
+            </View>
+          )}
 
           {localError ? (
             <Text style={[styles.errorText, { marginTop: errorMarginTop, fontSize: errorFont }]}>
@@ -1342,7 +1351,7 @@ const styles = StyleSheet.create({
     left: px(37),
     top: px(155),
     width: px(170),
-    height: px(51),
+    minHeight: px(51),
     borderRadius: 100,
     backgroundColor: "#ffffff",
     alignItems: "center",
@@ -1357,6 +1366,8 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   qrButtonLabel: {
+    width: "100%",
+    textAlign: "center",
     fontSize: px(16),
     lineHeight: px(19),
     fontWeight: "700",
@@ -1376,10 +1387,6 @@ const styles = StyleSheet.create({
   // ソース PNG のアスペクト比に合わせて height を調整）。
   heroAnago: {
     position: "absolute",
-    right: px(-8),
-    top: px(135),
-    width: px(112),
-    height: px(176),
   },
 
   // コレクションシート（Frame 42）。marginTop は JSX 側の collectionMarginTop が優先（ここに書いても反映されない）。
@@ -1389,15 +1396,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: px(33),
     paddingTop: px(33),
     paddingBottom: px(40),
-    borderTopLeftRadius: px(28),
-    borderTopRightRadius: px(28),
+    borderTopLeftRadius: px(32),
+    borderTopRightRadius: px(32),
   },
   collectionHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-end",
     marginBottom: px(20),
   },
   collectionLabel: {
+    maxWidth: "100%",
     fontSize: px(16),
     lineHeight: px(19),
     fontWeight: "700",
@@ -1555,7 +1564,7 @@ const styles = StyleSheet.create({
   // 測定中カード（QR 読み取り後の専用画面）。
   measureCard: {
     width: px(320),
-    height: px(320),
+    minHeight: px(320),
     borderRadius: px(24),
     backgroundColor: "#ffffff",
     position: "relative",
@@ -1566,8 +1575,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   measureTitle: {
-    position: "absolute",
-    width: "100%",
     textAlign: "center",
     fontSize: px(32),
     lineHeight: px(38),
@@ -1597,17 +1604,11 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   registerPostureTitle: {
-    position: "absolute",
-    left: 0,
-    right: 0,
     textAlign: "center",
     fontWeight: "700",
     color: "#13a2d7",
   },
   registerPostureSubtitle: {
-    position: "absolute",
-    left: 0,
-    right: 0,
     textAlign: "center",
     fontWeight: "700",
     color: "#989898",
